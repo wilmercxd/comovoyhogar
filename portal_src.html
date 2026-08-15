@@ -1,0 +1,1395 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>¿Cómo voy? · Hogar</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%232C2CE0'/%3E%3Cstop offset='.55' stop-color='%23E5007D'/%3E%3Cstop offset='1' stop-color='%2322D3EE'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Ctext x='16' y='22' font-family='Segoe UI,Arial' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3ECV%3C/text%3E%3C/svg%3E">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+:root{
+  --marca:#2C2CE0; --marca2:#E5007D; --marca3:#22D3EE;
+  --grad:linear-gradient(100deg,#2C2CE0 0%,#7B2BD1 45%,#E5007D 75%,#22D3EE 130%);
+  --fondo:#F4F5FA; --papel:#fff; --linea:#E6E8F0; --linea2:#F0F1F7;
+  --tx:#15161D; --tx2:#5A5F72; --tx3:#8A8FA3;
+  --ok:#12864B; --okbg:#E7F6EE; --am:#B45309; --ambg:#FEF3C7; --mal:#C42B2B; --malbg:#FDECEC;
+  --sombra:0 1px 2px rgba(16,18,40,.05),0 4px 14px rgba(16,18,40,.05);
+  --r:14px;
+  /* El logo se define una sola vez: incrustarlo en cada <img> triplicaria el peso. */
+  --logo:url("__LOGO__");
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+  background:var(--fondo); color:var(--tx); font-size:15px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;font-size:inherit;cursor:pointer}
+input,textarea,select{font-family:inherit;font-size:inherit}
+h1,h2,h3,h4{margin:0;font-weight:650;letter-spacing:-.015em}
+table{border-collapse:collapse;width:100%}
+.oculto{display:none!important}
+
+/* ---------------------------------------------------------------- marca */
+.logo{display:flex;align-items:center;gap:13px;font-weight:800;letter-spacing:-.03em}
+.cxd{
+  background-image:var(--logo);background-size:contain;background-repeat:no-repeat;
+  background-position:center;flex:0 0 auto;
+}
+.logo .cxd{width:78px;height:47px}
+.logo .sep{width:1px;height:28px;background:var(--linea);flex:0 0 auto}
+.logo .tx{font-size:17px;line-height:1.1}
+.logo .tx small{display:block;font-size:10.5px;font-weight:600;letter-spacing:.14em;color:var(--tx3)}
+/* Sobre el degradado el texto oscuro del logo se pierde: va sobre una tarjeta blanca. */
+.chip{
+  background:#fff;border-radius:13px;padding:12px 20px;
+  box-shadow:0 4px 18px rgba(10,12,40,.16);
+  align-self:flex-start;   /* si no, el flex de la columna lo estira a todo el ancho */
+}
+.chip .cxd{width:128px;height:78px}
+
+/* ---------------------------------------------------------------- login */
+#login{display:flex;min-height:100vh}
+#login .izq{
+  flex:1 1 46%;background:var(--grad);color:#fff;padding:56px 52px;
+  display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden;
+}
+#login .izq::after{
+  content:'';position:absolute;right:-140px;bottom:-140px;width:420px;height:420px;
+  border-radius:50%;background:rgba(255,255,255,.10);
+}
+#login .izq h1{font-size:40px;line-height:1.08;margin-bottom:14px}
+#login .izq p{color:rgba(255,255,255,.88);max-width:30rem;margin:0 0 22px}
+#login .izq ul{list-style:none;padding:0;margin:0;display:grid;gap:9px;position:relative;z-index:1}
+#login .izq li{display:flex;gap:10px;align-items:flex-start;color:rgba(255,255,255,.92);font-size:14.5px}
+#login .izq li b{color:#fff;font-weight:650}
+#login .der{flex:1 1 54%;display:grid;place-items:center;padding:40px 24px}
+.caja{width:100%;max-width:392px}
+.caja h2{font-size:25px;margin-bottom:6px}
+.caja>p{color:var(--tx2);margin:0 0 26px;font-size:14.5px}
+.campo{margin-bottom:15px}
+.campo label{display:block;font-size:12.5px;font-weight:650;color:var(--tx2);margin-bottom:6px}
+.campo input{
+  width:100%;padding:11px 13px;border:1.5px solid var(--linea);border-radius:10px;
+  background:#fff;color:var(--tx);outline:none;transition:border-color .15s,box-shadow .15s;
+}
+.campo input:focus{border-color:var(--marca);box-shadow:0 0 0 3px rgba(44,44,224,.12)}
+.campo .ayuda{font-size:12px;color:var(--tx3);margin-top:5px}
+.btn{
+  width:100%;padding:12px;border:0;border-radius:10px;background:var(--grad);
+  color:#fff;font-weight:700;letter-spacing:.01em;box-shadow:var(--sombra);
+}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn.sec{background:#fff;color:var(--tx);border:1.5px solid var(--linea);box-shadow:none}
+.btn.mini{width:auto;padding:8px 14px;font-size:13.5px;border-radius:9px}
+.aviso{padding:11px 13px;border-radius:10px;font-size:13.5px;margin-bottom:15px;display:none}
+.aviso.err{background:var(--malbg);color:var(--mal);display:block}
+.aviso.ok{background:var(--okbg);color:var(--ok);display:block}
+.pie{margin-top:22px;font-size:12px;color:var(--tx3);text-align:center}
+
+/* ------------------------------------------------------------------ app */
+header.top{
+  background:#fff;border-bottom:1px solid var(--linea);position:sticky;top:0;z-index:40;
+}
+.top .fila{
+  max-width:1240px;margin:0 auto;padding:12px 22px;display:flex;align-items:center;gap:16px;
+}
+.top .quien{margin-left:auto;text-align:right;line-height:1.25}
+.top .quien b{display:block;font-size:13.5px}
+.top .quien span{font-size:11.5px;color:var(--tx3)}
+.salir{
+  background:none;border:1.5px solid var(--linea);border-radius:9px;padding:7px 12px;
+  font-size:13px;font-weight:600;color:var(--tx2);
+}
+.tabs{max-width:1240px;margin:0 auto;padding:0 22px;display:flex;gap:2px;overflow-x:auto}
+.tab{
+  background:none;border:0;border-bottom:2.5px solid transparent;padding:11px 15px;
+  font-size:14px;font-weight:650;color:var(--tx3);white-space:nowrap;display:flex;align-items:center;gap:7px;
+}
+.tab.on{color:var(--marca);border-bottom-color:var(--marca)}
+.pill{
+  background:var(--marca2);color:#fff;border-radius:99px;padding:1px 7px;font-size:11px;font-weight:800;
+}
+main{max-width:1240px;margin:0 auto;padding:24px 22px 70px}
+
+.sec{margin-bottom:30px}
+.sec>h3{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx3);margin-bottom:11px}
+.card{background:var(--papel);border:1px solid var(--linea);border-radius:var(--r);box-shadow:var(--sombra)}
+.card.p{padding:18px}
+
+/* selector de mes */
+.meses{display:flex;gap:8px;margin-bottom:22px;flex-wrap:wrap}
+.mesbtn{
+  background:#fff;border:1.5px solid var(--linea);border-radius:99px;padding:8px 16px;
+  font-size:13.5px;font-weight:650;color:var(--tx2);display:flex;align-items:center;gap:8px;
+}
+.mesbtn.on{background:var(--tx);color:#fff;border-color:var(--tx)}
+.mesbtn .et{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:13px}
+.kpi{background:var(--papel);border:1px solid var(--linea);border-radius:var(--r);padding:15px 16px;box-shadow:var(--sombra)}
+.kpi .et{font-size:11.5px;font-weight:650;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em}
+.kpi .val{font-size:33px;font-weight:750;letter-spacing:-.03em;margin:3px 0 2px;line-height:1.05}
+.kpi .val small{font-size:15px;font-weight:600;color:var(--tx3);letter-spacing:0}
+.kpi .sub{font-size:12.5px;color:var(--tx2)}
+.delta{font-size:12.5px;font-weight:700;display:inline-flex;align-items:center;gap:3px}
+.delta.up{color:var(--ok)} .delta.dn{color:var(--mal)} .delta.eq{color:var(--tx3)}
+
+/* hero proyeccion */
+.hero{display:grid;grid-template-columns:1.15fr .85fr;gap:0;overflow:hidden}
+.hero>div{padding:21px 22px}
+.hero .izq{border-right:1px solid var(--linea)}
+.hero .der{background:#FAFAFE}
+.hero .gr{font-size:56px;font-weight:750;letter-spacing:-.04em;line-height:1;display:flex;align-items:baseline;gap:9px}
+.hero .gr span{font-size:17px;font-weight:600;color:var(--tx3);letter-spacing:-.01em}
+.barra{height:9px;background:var(--linea2);border-radius:99px;overflow:hidden;margin:13px 0 8px}
+.barra i{display:block;height:100%;border-radius:99px;transition:width .5s}
+.est{display:inline-flex;align-items:center;gap:6px;border-radius:99px;padding:3px 11px;font-size:12.5px;font-weight:700}
+.est.ok{background:var(--okbg);color:var(--ok)} .est.am{background:var(--ambg);color:var(--am)} .est.mal{background:var(--malbg);color:var(--mal)}
+.pt{background:var(--fondo);border:1px solid var(--linea);border-radius:10px;padding:11px 13px;margin-top:13px;font-size:13.5px;color:var(--tx2)}
+.pt b{color:var(--tx)}
+.esc{display:grid;gap:7px;margin-top:12px}
+.esc .e{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:9px;background:#fff;border:1px solid var(--linea);font-size:13px}
+.esc .e.on{border-color:var(--marca);background:#F3F3FE;box-shadow:0 0 0 2.5px rgba(44,44,224,.09)}
+.esc .e .n{font-weight:700;min-width:52px}
+.esc .e .d{color:var(--tx3);margin-left:auto;font-variant-numeric:tabular-nums}
+
+/* tablas */
+.tbl{width:100%;font-size:13.5px}
+.tbl th{
+  text-align:left;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--tx3);
+  font-weight:700;padding:9px 12px;border-bottom:1px solid var(--linea);white-space:nowrap;
+}
+.tbl td{padding:10px 12px;border-bottom:1px solid var(--linea2);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:0}
+.tbl .n{text-align:right;font-variant-numeric:tabular-nums}
+.tbl th.n{text-align:right}
+.tbl th.orden{cursor:pointer;user-select:none}
+.tbl th.orden:hover{color:var(--marca)}
+.tbl tbody tr:hover{background:#FAFAFE}
+.tbl .destaca{font-weight:700}
+.envolt{overflow-x:auto;border-radius:var(--r)}
+.rep{display:flex;align-items:center;gap:8px}
+.rep .b{flex:1;height:6px;background:var(--linea2);border-radius:99px;overflow:hidden;min-width:44px}
+.rep .b i{display:block;height:100%;background:var(--grad);border-radius:99px}
+.tag{display:inline-block;border-radius:6px;padding:2px 8px;font-size:11.5px;font-weight:700;white-space:nowrap}
+.tag.g{background:var(--okbg);color:var(--ok)} .tag.a{background:var(--ambg);color:var(--am)}
+.tag.r{background:var(--malbg);color:var(--mal)} .tag.n{background:var(--linea2);color:var(--tx2)}
+.cc{font-variant-numeric:tabular-nums;font-weight:650;letter-spacing:.01em}
+
+.nota{font-size:12.5px;color:var(--tx3);margin-top:9px;line-height:1.55}
+.callout{
+  border-left:3px solid var(--marca2);background:#fff;border-radius:0 10px 10px 0;
+  padding:13px 15px;font-size:13.5px;color:var(--tx2);margin-bottom:13px;box-shadow:var(--sombra);
+}
+.callout b{color:var(--tx)}
+.vacio{text-align:center;padding:34px 20px;color:var(--tx3);font-size:14px}
+
+/* firmas */
+.fb{margin-bottom:15px;overflow:hidden}
+.fb .cab{padding:15px 18px;border-bottom:1px solid var(--linea);display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.fb .cab h4{font-size:15.5px}
+.fb .cab .met{font-size:12.5px;color:var(--tx3);margin-top:2px}
+.fb .cab .der{margin-left:auto}
+.fb .cuerpo{padding:16px 18px;white-space:pre-wrap;font-size:14px;color:var(--tx2);line-height:1.65}
+.fb .firma{padding:16px 18px;border-top:1px solid var(--linea);background:#FAFAFE}
+canvas.lienzo{
+  width:100%;height:150px;border:1.5px dashed var(--linea);border-radius:10px;background:#fff;
+  touch-action:none;display:block;cursor:crosshair;
+}
+.firmada{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.firmada img{height:66px;border:1px solid var(--linea);border-radius:9px;background:#fff;padding:4px}
+.firmada .dat{font-size:12.5px;color:var(--tx2);line-height:1.65}
+textarea{
+  width:100%;padding:11px 13px;border:1.5px solid var(--linea);border-radius:10px;
+  resize:vertical;min-height:72px;outline:none;color:var(--tx);
+}
+textarea:focus{border-color:var(--marca);box-shadow:0 0 0 3px rgba(44,44,224,.12)}
+.acc{display:flex;gap:9px;margin-top:11px;flex-wrap:wrap}
+
+.mmeta{display:grid;grid-template-columns:1fr auto auto;gap:9px;align-items:end}
+.modal{position:fixed;inset:0;background:rgba(14,15,25,.5);display:grid;place-items:center;z-index:90;padding:22px}
+.modal .cont{background:#fff;border-radius:16px;max-width:640px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 24px 60px rgba(0,0,0,.25)}
+.modal .cont>div{padding:20px 22px}
+.modal h3{font-size:18px;margin-bottom:14px}
+
+@media(max-width:900px){
+  #login{flex-direction:column}
+  #login .izq{padding:32px 26px}
+  #login .izq h1{font-size:30px}
+  #login .izq ul{display:none}
+  .hero{grid-template-columns:1fr}
+  .hero .izq{border-right:0;border-bottom:1px solid var(--linea)}
+  .hero .gr{font-size:44px}
+  main{padding:18px 14px 60px}
+  .top .fila{padding:11px 14px}
+  .tabs{padding:0 14px}
+}
+@media print{
+  header.top,.tabs,.btn,.salir,.meses{display:none!important}
+  body{background:#fff}
+  .card{break-inside:avoid;box-shadow:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ================================================================ LOGIN -->
+<div id="login">
+  <div class="izq">
+    <div class="chip"><div class="cxd" role="img" aria-label="Conexiones Digitales"></div></div>
+    <div>
+      <h1>Tus ventas de<br>Hogar, al día.</h1>
+      <p>Entra con tu cédula y mira exactamente dónde vas parado este mes.</p>
+      <ul>
+        <li>▸ <span>Tus <b>instaladas al corte</b> y cómo van semana a semana.</span></li>
+        <li>▸ <span>Tu <b>proyección de cierre</b> y la comisión que va saliendo.</span></li>
+        <li>▸ <span>Las ventas que <b>se te están quedando</b>, con la cédula del cliente.</span></li>
+        <li>▸ <span>Las <b>OTT adicionales</b> que llevas vendidas.</span></li>
+        <li>▸ <span>Tu <b>retroalimentación</b>, para leerla y firmarla.</span></li>
+      </ul>
+    </div>
+    <div style="font-size:12px;color:rgba(255,255,255,.65)">Uso interno · Claro Hogar Barranquilla</div>
+  </div>
+
+  <div class="der">
+    <div class="caja">
+      <h2>Ingresa</h2>
+      <p>Tu usuario es tu cédula. La primera vez, la contraseña también.</p>
+      <div class="aviso" id="loginMsg"></div>
+      <form id="formLogin" autocomplete="off">
+        <div class="campo">
+          <label for="fCc">Cédula</label>
+          <input id="fCc" inputmode="numeric" autocomplete="username" required>
+        </div>
+        <div class="campo">
+          <label for="fPw">Contraseña</label>
+          <input id="fPw" type="password" autocomplete="current-password" required>
+          <div class="ayuda">La primera vez es tu misma cédula.</div>
+        </div>
+        <div class="campo">
+          <label for="fAp">Segundo apellido</label>
+          <input id="fAp" autocomplete="off" required>
+          <div class="ayuda">Solo para confirmar que eres tú.</div>
+        </div>
+        <button class="btn" type="submit" id="btnEntrar">Entrar</button>
+      </form>
+      <div class="pie" id="pieCorte"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== APP -->
+<div id="app" class="oculto">
+  <header class="top">
+    <div class="fila">
+      <div class="logo">
+        <div class="cxd" role="img" aria-label="Conexiones Digitales"></div>
+        <div class="sep"></div>
+        <div class="tx">¿Cómo voy?<small>HOGAR · BARRANQUILLA</small></div>
+      </div>
+      <div class="quien"><b id="qNombre"></b><span id="qRol"></span></div>
+      <button class="salir" id="btnSalir">Salir</button>
+    </div>
+    <nav class="tabs" id="tabs"></nav>
+  </header>
+  <main id="vista"></main>
+</div>
+
+<div id="modales"></div>
+
+<script>
+/* ===================================================================== */
+/*  Configuración                                                        */
+/* ===================================================================== */
+const SB_URL  = 'https://mrmtprhaoilwzwghzdqn.supabase.co';
+const SB_KEY  = 'sb_publishable_6feZTq9Z4bMECPKSWlE7-Q_7NDCSz4W';
+const DOMINIO = 'como-voy.local';
+const TZ      = 'America/Bogota';
+
+/* ===================================================================== */
+/*  Datos del corte (inyectados por construir.ps1)                       */
+/* ===================================================================== */
+const D = /*__VENTAS__*/null/*__FIN__*/;
+
+/* ===================================================================== */
+/*  Utilidades                                                           */
+/* ===================================================================== */
+const $  = s => document.querySelector(s);
+const el = (t,c,h) => { const n=document.createElement(t); if(c)n.className=c; if(h!=null)n.innerHTML=h; return n; };
+const esc = s => String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = n => new Intl.NumberFormat('es-CO').format(Math.round(n||0));
+const pes = n => '$' + num(n);
+const pct = n => Math.round((n||0)*100) + '%';
+const un1 = n => Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.',',');
+
+function norm(s){
+  return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^A-Za-z0-9 ]/g,'').toUpperCase().trim();
+}
+function fechaCorta(iso){
+  if(!iso) return '';
+  const [y,m,d] = iso.split('-');
+  return `${+d} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+m-1]}`;
+}
+// Postgres devuelve la marca de tiempo sin zona; sin la Z el navegador la lee como local.
+function fechaHora(ts){
+  if(!ts) return '';
+  const s = /[Zz]|[+-]\d{2}:?\d{2}$/.test(ts) ? ts : ts.replace(' ','T') + 'Z';
+  return new Date(s).toLocaleString('es-CO',{
+    timeZone:TZ, day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'
+  });
+}
+function semaforo(c){ return c>=.85 ? 'ok' : c>=.70 ? 'am' : 'mal'; }
+function colorSem(c){ return c>=.85 ? 'var(--ok)' : c>=.70 ? 'var(--am)' : 'var(--mal)'; }
+function textoSem(c){ return c>=.85 ? 'En meta' : c>=.70 ? 'Ajustado' : 'Por debajo'; }
+
+const MSG_ESTADO = {
+  'AGENDADO':                {t:'a', m:'Sigue en pie. Llama al cliente un día antes y confirma que va a estar en la casa.'},
+  'OT CANCELADA':            {t:'r', m:'Se cayó la instalación. Contacta al cliente y reagenda cuanto antes: esta venta todavía se puede salvar.'},
+  'NO INSTALADO':            {t:'r', m:'El técnico no pudo instalar. Averigua qué pasó y reprograma la visita.'},
+  'RECHAZADO':               {t:'r', m:'No pasó validación. Revisa el motivo: si son datos errados, corrígelos y vuelve a radicar.'},
+  'NO AGENDADO':             {t:'a', m:'Quedó sin fecha de instalación. Gestiona el agendamiento con back.'},
+  'RECLAMADO X OTRO ALIADO': {t:'n', m:'Otro aliado reclamó esta venta. Muéstrasela a tu supervisor para que la dispute.'},
+  'DESCONECTADO':            {t:'r', m:'El servicio quedó desconectado. Verifica con el cliente el motivo.'},
+  'IRRECUPERABLE':           {t:'n', m:'Esta venta ya no se puede recuperar. Úsala para revisar qué se pudo hacer distinto.'},
+  'ESCALAMIENTO':            {t:'a', m:'Está escalada. Haz seguimiento con tu supervisor hasta que se resuelva.'}
+};
+function msgEstado(e){ return MSG_ESTADO[e] || {t:'n', m:'Revisa el estado con tu supervisor.'}; }
+
+/* ===================================================================== */
+/*  Estado de la aplicación                                              */
+/* ===================================================================== */
+const sb = supabase.createClient(SB_URL, SB_KEY);
+const MESES = Object.keys(D.meses).sort();
+const S = {
+  user:null, cc:null, rol:null, nombre:null,
+  agente:null, mes:MESES[MESES.length-1], tab:'desempeno',
+  feedback:[], firmas:[], notas:[], metas:[]
+};
+
+/* ===================================================================== */
+/*  Login                                                                */
+/* ===================================================================== */
+$('#pieCorte').textContent = `Conexiones Digitales · corte al ${fechaCorta(D.corte)} de ${new Date(D.corte).getFullYear()}`;
+
+function msgLogin(t, clase){
+  const n = $('#loginMsg');
+  n.className = 'aviso ' + (clase||'err');
+  n.textContent = t;
+  if(!t) n.className = 'aviso';
+}
+
+function buscarPersona(cc){
+  if(cc === D.sup.cc) return {cc:D.sup.cc, nombre:D.sup.nombre, ap2:D.sup.ap2, rol:'SUPERVISOR'};
+  const a = D.agentes.find(x => x.cc === cc);
+  return a ? {cc:a.cc, nombre:a.nombre, ap2:a.ap2, rol:'ASESOR'} : null;
+}
+
+$('#formLogin').addEventListener('submit', async e => {
+  e.preventDefault();
+  const cc = $('#fCc').value.trim(), pw = $('#fPw').value, ap = $('#fAp').value.trim();
+  const btn = $('#btnEntrar');
+  msgLogin('');
+
+  const p = buscarPersona(cc);
+  if(!p){ return msgLogin('Esa cédula no está en el equipo de Hogar. Revísala o escríbele a tu supervisor.'); }
+  if(norm(ap) !== p.ap2){ return msgLogin('El segundo apellido no coincide con el de tu cédula. Escríbelo tal como aparece en tu documento.'); }
+
+  btn.disabled = true; btn.textContent = 'Entrando…';
+  try{
+    let { data, error } = await sb.auth.signInWithPassword({ email:`${cc}@${DOMINIO}`, password:pw });
+
+    // Primer ingreso: se crea la cuenta con la cédula como contraseña.
+    if(error && pw === cc){
+      const r = await sb.auth.signUp({
+        email:`${cc}@${DOMINIO}`, password:pw,
+        options:{ data:{ cc, nombre:p.nombre, rol:p.rol } }
+      });
+      if(!r.error){
+        const r2 = await sb.auth.signInWithPassword({ email:`${cc}@${DOMINIO}`, password:pw });
+        data = r2.data; error = r2.error;
+      }
+    }
+    if(error) throw error;
+
+    S.user = data.user; S.cc = cc; S.rol = p.rol; S.nombre = p.nombre;
+    await entrar();
+  }catch(err){
+    const m = String(err.message||err);
+    if(/Invalid login/i.test(m))        msgLogin('Contraseña incorrecta. Si nunca has entrado, usa tu cédula como contraseña.');
+    else if(/Failed to fetch/i.test(m)) msgLogin('No hay conexión con el servidor. Revisa tu internet y vuelve a intentar.');
+    else                                msgLogin('No se pudo entrar: ' + m);
+  }finally{
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+});
+
+$('#btnSalir').addEventListener('click', async () => { await sb.auth.signOut(); location.reload(); });
+
+async function entrar(){
+  $('#login').classList.add('oculto');
+  $('#app').classList.remove('oculto');
+  $('#qNombre').textContent = S.nombre;
+  $('#qRol').textContent = S.rol === 'SUPERVISOR'
+    ? 'Supervisor · corte ' + fechaCorta(D.corte)
+    : (S.agente ? S.agente.equipo : '') + ' · corte ' + fechaCorta(D.corte);
+
+  if(S.rol === 'ASESOR'){
+    S.agente = D.agentes.find(a => a.cc === S.cc);
+    $('#qRol').textContent = S.agente.equipo + ' · corte ' + fechaCorta(D.corte);
+    S.tab = 'desempeno';
+  }else{
+    S.tab = 'equipo';
+  }
+  await cargarServidor();
+  pintarTabs();
+  pintar();
+}
+
+/* ===================================================================== */
+/*  Datos del servidor                                                   */
+/* ===================================================================== */
+async function cargarServidor(){
+  // Sin filtro por cédula: RLS acota. El supervisor no tiene firmas propias.
+  const [fb, fi, no, me] = await Promise.all([
+    sb.from('feedback').select('*').order('creado_en',{ascending:false}),
+    sb.from('firmas').select('*'),
+    sb.from('notas').select('*').order('creado_en',{ascending:false}),
+    sb.from('metas').select('*').eq('cc_asesor', S.cc)
+  ]);
+  S.feedback = fb.data || []; S.firmas = fi.data || [];
+  S.notas    = no.data || []; S.metas   = me.data || [];
+  if(fb.error) console.warn('feedback:', fb.error.message);
+  if(fi.error) console.warn('firmas:', fi.error.message);
+}
+const firmaDe = id => S.firmas.find(f => f.feedback_id === id);
+const misFeedback = () => S.feedback.filter(f => f.cc_asesor === S.cc);
+const pendientesFirma = () => misFeedback().filter(f => !firmaDe(f.id)).length;
+
+/* ===================================================================== */
+/*  Navegación                                                           */
+/* ===================================================================== */
+function pintarTabs(){
+  const t = $('#tabs'); t.innerHTML = '';
+  const defs = S.rol === 'SUPERVISOR'
+    ? [['equipo','Mi equipo'],['firmas','Firmas del equipo'],['notas','Consolidado de notas']]
+    : [['desempeno','Mi desempeño'],['fb','Retroalimentación'],['metas','Mis metas']];
+  defs.forEach(([k,txt]) => {
+    const b = el('button','tab'+(S.tab===k?' on':''), esc(txt));
+    if(k==='fb'){ const n = pendientesFirma(); if(n) b.appendChild(el('span','pill',String(n))); }
+    if(k==='firmas'){
+      const n = S.feedback.filter(f => !firmaDe(f.id)).length;
+      if(n) b.appendChild(el('span','pill',String(n)));
+    }
+    b.onclick = () => { S.tab = k; pintarTabs(); pintar(); window.scrollTo(0,0); };
+    t.appendChild(b);
+  });
+}
+function pintar(){
+  const v = $('#vista'); v.innerHTML = '';
+  ({ desempeno:vDesempeno, fb:vFeedback, metas:vMetas,
+     equipo:vEquipo, firmas:vFirmas, notas:vNotas })[S.tab](v);
+}
+
+/* ===================================================================== */
+/*  Selector de mes                                                      */
+/* ===================================================================== */
+function selectorMes(cont){
+  const c = el('div','meses');
+  MESES.forEach(mk => {
+    const m = D.meses[mk];
+    const b = el('button','mesbtn'+(S.mes===mk?' on':''),
+      `${esc(m.nombre)} <span class="et">${m.cerrado?'cerrado':'en curso'}</span>`);
+    b.onclick = () => { S.mes = mk; pintar(); };
+    c.appendChild(b);
+  });
+  cont.appendChild(c);
+}
+
+/* ===================================================================== */
+/*  ASESOR · Mi desempeño                                                */
+/* ===================================================================== */
+function vDesempeno(v){
+  selectorMes(v);
+  const mk = S.mes, mes = D.meses[mk], a = S.agente, m = a.m[mk];
+
+  if(!m){
+    v.appendChild(el('div','card p vacio',
+      `No tienes ventas registradas en ${esc(mes.nombre)}.`));
+    return;
+  }
+
+  const esq  = D.esquema[a.tipo];
+  const prev = MESES[MESES.indexOf(mk)-1];
+  const ant  = prev ? a.m[prev] : null;
+
+  /* ---------------------------------------------------- 1. indicadores */
+  const s1 = el('section','sec');
+  s1.appendChild(el('h3',null,'Mis indicadores'));
+  const g = el('div','kpis');
+
+  // Con el mes a medias, comparar el dato crudo contra un mes ya cerrado siempre
+  // da rojo. Se compara la proyección contra el cierre anterior.
+  const fac = mes.cerrado ? 1 : mes.hab.tot / mes.hab.tr;
+  const ref = ant ? ` en ${D.meses[prev].corto}` : null;
+  const vs  = v2 => ant ? (mes.cerrado ? `${un1(v2)}${ref}` : `proyección vs ${un1(v2)}${ref}`) : null;
+
+  g.appendChild(kpi('Instaladas', un1(m.inst),
+    mes.cerrado ? 'Cierre definitivo del mes' : `Al corte del ${fechaCorta(D.corte)} · proyección ${un1(m.proy)}`,
+    ant ? +(m.proy - ant.inst).toFixed(1) : null, vs(ant?.inst)));
+
+  g.appendChild(kpi('Contrato digital', m.digPct.toFixed(0).replace('.',',') + '<small>%</small>',
+    `${m.dig} de ${m.gest} ventas radicadas`,
+    ant ? +(m.digPct - ant.digPct).toFixed(1) : null,
+    ant ? `${ant.digPct}%${ref}` : null, true));
+
+  const ottProy = Math.round(m.ott * fac);
+  g.appendChild(kpi('OTT adicionales', un1(m.ott),
+    m.inst ? (m.ott/m.inst).toFixed(1).replace('.',',') + ' por venta instalada' : 'Sin instaladas aún',
+    ant ? ottProy - ant.ott : null, vs(ant?.ott)));
+
+  const gestProy = Math.round(m.gest * fac);
+  g.appendChild(kpi('Ventas gestionadas', un1(m.gest),
+    `${m.gest - m.inst} ${mes.cerrado ? 'no se instalaron' : 'sin instalar todavía'}`,
+    ant ? gestProy - ant.gest : null, vs(ant?.gest)));
+
+  s1.appendChild(g);
+  v.appendChild(s1);
+
+  /* ------------------------------------- 2. proyección / cierre + comisión */
+  const s2 = el('section','sec');
+  s2.appendChild(el('h3',null, mes.cerrado ? 'Cómo cerraste el mes' : 'Proyección al cierre de mes'));
+
+  const puesto = ranking(mk).findIndex(x => x.cc === a.cc) + 1;
+  const total  = D.agentes.filter(x => x.m[mk]).length;
+  const avance = Math.min(1, m.proy / m.meta);
+
+  const hero = el('div','card hero');
+  const izq  = el('div','izq');
+
+  izq.appendChild(el('div','kpi-et',
+    `<div style="font-size:11.5px;font-weight:650;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em">
+       ${mes.cerrado ? 'Instaladas al cierre' : 'Proyección de instaladas'}</div>`));
+  izq.appendChild(el('div','gr', `${un1(m.proy)} <span>de ${m.meta} de meta</span>`));
+
+  const b = el('div','barra');
+  b.appendChild(el('i',null,'')).style.cssText =
+    `width:${(avance*100).toFixed(1)}%;background:${colorSem(m.cumpl)}`;
+  izq.appendChild(b);
+
+  izq.appendChild(el('div',null,
+    `<span class="est ${semaforo(m.cumpl)}">${pct(m.cumpl)} · ${textoSem(m.cumpl)}</span>
+     <span style="font-size:13px;color:var(--tx3);margin-left:10px">Puesto ${puesto} de ${total} en el equipo</span>`));
+
+  izq.appendChild(el('div','pt', mensajeEsfuerzo(m, mes, esq)));
+
+  // La proyección solo cuenta lo ya instalado. Lo agendado explica el resto.
+  const agend = m.pend.filter(p => p.est === 'AGENDADO').length;
+  if(agend && !mes.cerrado){
+    izq.appendChild(el('div','pt',
+      `Además tienes <b>${agend} venta${agend===1?'':'s'} agendada${agend===1?'':'s'}</b> esperando instalación.
+       La proyección todavía no las cuenta: si todas entran, cierras cerca de
+       <b>${un1(m.instC + agend)}</b>. Confírmalas con el cliente antes de la visita.`));
+  }
+  hero.appendChild(izq);
+
+  /* --------------------------------------------------------- comisión */
+  const der = el('div','der');
+  der.appendChild(el('div',null,
+    `<div style="font-size:11.5px;font-weight:650;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em">
+       ${mes.cerrado ? 'Comisión del mes' : 'Comisión proyectada'}</div>`));
+  der.appendChild(el('div',null,
+    `<div style="font-size:34px;font-weight:750;letter-spacing:-.03em;line-height:1.15;margin:2px 0 3px">${pes(m.total)}</div>`));
+
+  if(mes.bonoSem){
+    der.appendChild(el('div',null,
+      `<div style="font-size:13px;color:var(--tx2)">
+         ${pes(m.comBase)} de base <span style="color:var(--tx3)">+</span> ${pes(m.extra)} de extra bono semanal
+       </div>`));
+  }else{
+    der.appendChild(el('div',null,
+      `<div style="font-size:13px;color:var(--tx2)">Comisión base del mes. En ${esc(D.meses[MESES[MESES.length-1]].corto)} se suma además el extra bono semanal.</div>`));
+  }
+
+  const e = el('div','esc');
+  esq.mes.forEach(([desde,val],i) => {
+    const on = m.piso === i+1;
+    e.appendChild(el('div','e'+(on?' on':''),
+      `<span class="n">Piso ${i+1}</span>
+       <span>desde ${desde} ventas</span>
+       <span class="d">${pes(val)} c/u</span>`));
+  });
+  der.appendChild(e);
+
+  if(m.sigEsc && !mes.cerrado){
+    const faltan = Math.ceil(m.sigEsc[0] - m.proy);
+    der.appendChild(el('div','nota',
+      `Te faltan <b>${faltan} instalada${faltan===1?'':'s'}</b> de proyección para llegar al piso de ${m.sigEsc[0]} y que cada venta te pase a valer ${pes(m.sigEsc[1])}.`));
+  }else if(m.piso === 0){
+    der.appendChild(el('div','nota',
+      `Todavía no llegas al Piso 1 (${esq.mes[0][0]} ventas). Por debajo de ahí no se genera comisión base del mes.`));
+  }
+  hero.appendChild(der);
+  s2.appendChild(hero);
+
+  if(mes.cerrado && m.oficial != null && m.oficial !== m.inst){
+    s2.appendChild(el('div','nota',
+      `Nota: el consolidado oficial de ${esc(mes.corto)} te reportó <b>${m.oficial}</b> instaladas. Aquí ves <b>${m.inst}</b> porque se cuentan las ventas de la sábana con fecha de agenda dentro del mes. Si la diferencia te afecta, revísala con tu supervisor.`));
+  }
+  v.appendChild(s2);
+
+  /* ------------------------------------------------------ 3. semanas */
+  const s3 = el('section','sec');
+  s3.appendChild(el('h3',null,'Semana a semana'));
+  if(mes.bonoSem){
+    s3.appendChild(el('div','callout',
+      `<b>Cada semana se paga aparte.</b> Se mide sola: las ventas de esa semana × la tarifa del piso al que llegues.
+       Una semana puede quedar en Piso 1 y la siguiente en Piso 3. La suma de las cuatro es tu extra bono.`));
+  }
+
+  const tw = el('table','tbl');
+  tw.innerHTML = `<thead><tr>
+      <th>Semana</th><th>Del</th><th class="n">Días hábiles</th><th class="n">Instaladas</th>
+      ${mes.bonoSem ? '<th>Piso</th><th class="n">Valor por venta</th><th class="n">Comisión</th>' : ''}
+    </tr></thead>`;
+  const tb = el('tbody');
+  mes.semanas.forEach((s,i) => {
+    const d = m.sem[i]; if(!d) return;
+    const tr = el('tr');
+    const marca = s.abierta ? ' <span class="tag a">en curso</span>' : s.futura ? ' <span class="tag n">por venir</span>' : '';
+    tr.innerHTML = `
+      <td class="destaca">Semana ${s.n}${marca}</td>
+      <td style="color:var(--tx2)">${fechaCorta(s.ini)} al ${fechaCorta(s.fin)}</td>
+      <td class="n" style="color:var(--tx3)">${s.dias}</td>
+      <td class="n destaca">${d.inst}</td>
+      ${mes.bonoSem ? `
+        <td>${d.piso ? `<span class="tag ${d.piso>=3?'g':d.piso===2?'a':'n'}">Piso ${d.piso}</span>`
+                     : `<span class="tag n">sin piso</span>`}</td>
+        <td class="n">${d.tarifa ? pes(d.tarifa) : '—'}</td>
+        <td class="n destaca">${d.com ? pes(d.com) : '—'}</td>` : ''}`;
+    tb.appendChild(tr);
+  });
+  if(mes.bonoSem){
+    const tr = el('tr');
+    tr.style.cssText = 'background:#FAFAFE';
+    tr.innerHTML = `<td colspan="6" class="destaca">Extra bono · suma de las semanas</td>
+                    <td class="n destaca" style="color:var(--marca)">${pes(m.extra)}</td>`;
+    tb.appendChild(tr);
+  }
+  tw.appendChild(tb);
+  const env = el('div','card envolt'); env.appendChild(tw);
+  s3.appendChild(env);
+
+  const escSem = esq.sem.map(([d,val]) => `${d} ventas ${pes(val)}`).join(' · ');
+  s3.appendChild(el('div','nota',
+    `Las semanas van de lunes a sábado y no se cuentan los domingos ni los festivos${
+      mes.festivos.length ? ' (' + mes.festivos.map(f => fechaCorta(f.f)).join(' y ') + ')' : ''
+    }. El mínimo de cada semana es fijo, no se prorratea por días laborados.${
+      mes.bonoSem ? ' Pisos de tu equipo por semana: ' + escSem + '.' : ''}`));
+  v.appendChild(s3);
+
+  /* ---------------------------------------------------------- 4. OTT */
+  const s4 = el('section','sec');
+  s4.appendChild(el('h3',null,'Mis OTT y adicionales'));
+  if(!m.ottDet.length && !m.vasDet.length){
+    s4.appendChild(el('div','card p vacio','Todavía no registras adicionales en ventas instaladas este mes.'));
+  }else{
+    const maxN = Math.max(1, ...m.ottDet.map(x=>x[1]), ...m.vasDet.map(x=>x[1]));
+    const t = el('table','tbl');
+    t.innerHTML = `<thead><tr><th>Adicional</th><th>Tipo</th><th class="n">Unidades</th><th style="width:34%">Reparto</th></tr></thead>`;
+    const b2 = el('tbody');
+    [...m.ottDet.map(x=>[...x,'OTT']), ...m.vasDet.map(x=>[...x,'Otro'])].forEach(([n,q,tipo]) => {
+      const tr = el('tr');
+      tr.innerHTML = `<td class="destaca">${esc(n)}</td>
+        <td><span class="tag ${tipo==='OTT'?'g':'n'}">${tipo}</span></td>
+        <td class="n destaca">${q}</td>
+        <td><div class="rep"><div class="b"><i style="width:${(q/maxN*100).toFixed(0)}%"></i></div></div></td>`;
+      b2.appendChild(tr);
+    });
+    t.appendChild(b2);
+    const e2 = el('div','card envolt'); e2.appendChild(t);
+    s4.appendChild(e2);
+
+    const razon = m.inst ? m.ott/m.inst : 0;
+    s4.appendChild(el('div','nota', m.inst === 0
+      ? 'Cuando tengas instaladas, aquí verás cuántas OTT le estás sumando a cada plan.'
+      : razon >= 1.2
+        ? `Vas en <b>${razon.toFixed(1).replace('.',',')} OTT por venta instalada</b>. Estás montando adicionales sobre casi todos los planes: sigue así.`
+        : `Vas en <b>${razon.toFixed(1).replace('.',',')} OTT por venta instalada</b>. Si le ofreces una OTT a cada cliente que cierras, subes ese número sin vender un plan más.`));
+  }
+  v.appendChild(s4);
+
+  /* -------------------------------------------- 5. ventas por revisar */
+  const s5 = el('section','sec');
+  s5.appendChild(el('h3',null,'Ventas por revisar'));
+  if(!m.pend.length){
+    s5.appendChild(el('div','card p vacio','No tienes ventas pendientes este mes: todo lo que radicaste quedó instalado.'));
+  }else{
+    const porEstado = {};
+    m.pend.forEach(p => (porEstado[p.est] = porEstado[p.est] || []).push(p));
+
+    s5.appendChild(el('div','callout',
+      `<b>Estas ${m.pend.length} ventas no están instaladas.</b> Cada una tiene la cédula del cliente:
+       búscala, llama y mira qué se puede recuperar. Las que están agendadas todavía cuentan si se instalan.`));
+
+    Object.entries(porEstado)
+      .sort((a2,b2) => b2[1].length - a2[1].length)
+      .forEach(([est, filas]) => {
+        const info = msgEstado(est);
+        const c = el('div','card'); c.style.marginBottom = '13px';
+        c.appendChild(el('div',null,
+          `<div style="padding:14px 16px;border-bottom:1px solid var(--linea)">
+             <span class="tag ${info.t}">${esc(est)}</span>
+             <span class="destaca" style="margin-left:9px">${filas.length} venta${filas.length===1?'':'s'}</span>
+             <div style="font-size:13.5px;color:var(--tx2);margin-top:7px">${esc(info.m)}</div>
+           </div>`));
+        const t = el('table','tbl');
+        t.innerHTML = `<thead><tr>
+            <th>Cédula del cliente</th><th>Cliente</th><th>Ciudad</th>
+            <th>Fecha agenda</th><th>Motivo</th></tr></thead>`;
+        const tb2 = el('tbody');
+        filas.forEach(p => {
+          const tr = el('tr');
+          tr.innerHTML = `<td class="cc">${esc(p.cc||'—')}</td>
+            <td>${esc(p.nom||'—')}</td>
+            <td style="color:var(--tx2)">${esc(p.ciu||'—')}</td>
+            <td style="color:var(--tx2)">${fechaCorta(p.ag)}</td>
+            <td style="color:var(--tx3)">${esc(p.mot||'—')}</td>`;
+          tb2.appendChild(tr);
+        });
+        t.appendChild(tb2);
+        const en = el('div','envolt'); en.appendChild(t);
+        c.appendChild(en);
+        s5.appendChild(c);
+      });
+  }
+  v.appendChild(s5);
+
+  v.appendChild(el('div','nota',
+    `Todo se cuenta por <b>fecha de agenda</b>, no por fecha de venta. La proyección multiplica lo que llevas
+     por los días hábiles que faltan (${mes.hab.tr} de ${mes.hab.tot} transcurridos) y no descuenta ausencias.
+     Datos generados el ${esc(D.generado)}.`));
+}
+
+function kpi(et, val, sub, delta, refe, esPuntos){
+  const c = el('div','kpi');
+  c.innerHTML = `<div class="et">${esc(et)}</div><div class="val">${val}</div><div class="sub">${esc(sub)}</div>`;
+  if(delta != null && refe){
+    const cl = delta > 0 ? 'up' : delta < 0 ? 'dn' : 'eq';
+    const fl = delta > 0 ? '▲' : delta < 0 ? '▼' : '=';
+    const t  = esPuntos ? `${Math.abs(delta).toFixed(1).replace('.',',')} pts` : un1(Math.abs(delta));
+    c.appendChild(el('div',null,
+      `<div style="margin-top:7px"><span class="delta ${cl}">${fl} ${t}</span>
+       <span style="font-size:12px;color:var(--tx3);margin-left:5px">${esc(refe)}</span></div>`));
+  }
+  return c;
+}
+
+function mensajeEsfuerzo(m, mes, esq){
+  if(mes.cerrado){
+    if(m.cumpl >= 1) return `Cerraste en <b>${pct(m.cumpl)}</b> de tu meta de ${m.meta}. Ese es tu piso: sostenerlo este mes es lo que vale.`;
+    const f = m.meta - m.inst;
+    return `Cerraste ${f} instalada${f===1?'':'s'} por debajo de la meta de ${m.meta}. Este mes arrancas de cero: vas por ellas.`;
+  }
+  const rest = mes.hab.rest;
+  if(rest === 0) return `Ya no quedan días hábiles. Cierras en <b>${un1(m.inst)}</b> instaladas.`;
+
+  // Mientras no llegue a la meta el objetivo es la meta; ya pasada, el siguiente piso.
+  let objetivo = m.meta, comoSe = `la meta de ${m.meta}`;
+  if(m.instC >= m.meta){
+    const sig = esq.mes.find(([d]) => m.instC < d);
+    if(!sig) return `Ya pasaste el último piso con ${m.instC} instaladas y quedan <b>${rest} días hábiles</b>.
+                     De aquí en adelante cada venta te suma directo a la comisión.`;
+    objetivo = sig[0]; comoSe = `el piso de ${sig[0]} (cada venta pasa a valer ${pes(sig[1])})`;
+  }
+
+  const faltan = objetivo - m.instC;
+  const req    = faltan / rest;
+  const txt = `Te faltan <b>${faltan} instalada${faltan===1?'':'s'}</b> para ${comoSe} y quedan
+               <b>${rest} días hábiles</b>: ${req.toFixed(1).replace('.',',')} por día.`;
+
+  if(!m.ritmo) return txt + ' Todavía no tienes instaladas este mes: la primera es la que rompe el hielo.';
+  const esf = (req / m.ritmo) - 1;
+  return txt + (esf <= 0
+    ? ` Vas a ${m.ritmo.toFixed(1).replace('.',',')} por día: con ese ritmo llegas.`
+    : ` Vas a ${m.ritmo.toFixed(1).replace('.',',')} por día, así que tienes que
+        <b>subir el ritmo ${Math.round(esf*100)}%</b> para alcanzarlo.`);
+}
+
+function ranking(mk){
+  return D.agentes.filter(a => a.m[mk])
+    .map(a => ({cc:a.cc, nombre:a.nombre, tipo:a.tipo, m:a.m[mk]}))
+    .sort((x,y) => y.m.cumpl - x.m.cumpl || y.m.inst - x.m.inst);
+}
+
+/* ===================================================================== */
+/*  ASESOR · Retroalimentación y firmas                                  */
+/* ===================================================================== */
+function vFeedback(v){
+  const lista = misFeedback();
+  if(!lista.length){
+    v.appendChild(el('div','card p vacio',
+      'Todavía no tienes retroalimentación cargada. Cuando tu supervisor te registre una, aparece aquí para que la leas y la firmes.'));
+    return;
+  }
+  const pend = lista.filter(f => !firmaDe(f.id)).length;
+  if(pend){
+    v.appendChild(el('div','callout',
+      `<b>Tienes ${pend} retroalimentación${pend===1?'':'es'} sin firmar.</b>
+       Léela, escribe tus observaciones si quieres dejar constancia y firma abajo.`));
+  }
+  lista.forEach(f => v.appendChild(tarjetaFeedback(f, true)));
+}
+
+function tarjetaFeedback(f, firmable){
+  const fi = firmaDe(f.id);
+  const c  = el('div','card fb');
+
+  c.appendChild(el('div','cab',
+    `<div>
+       <h4>${esc(f.titulo)}</h4>
+       <div class="met">${esc(f.periodo||'')} · registrada el ${fechaHora(f.creado_en)} por ${esc(f.nombre_supervisor||'tu supervisor')}</div>
+     </div>
+     <div class="der">${fi ? '<span class="tag g">Firmada</span>' : '<span class="tag a">Pendiente de firma</span>'}</div>`));
+
+  c.appendChild(el('div','cuerpo', esc(f.cuerpo)));
+  if(f.compromisos){
+    c.appendChild(el('div',null,
+      `<div style="padding:0 18px 16px">
+         <div style="font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);margin-bottom:6px">Compromisos</div>
+         <div style="white-space:pre-wrap;font-size:14px;color:var(--tx2);line-height:1.65">${esc(f.compromisos)}</div>
+       </div>`));
+  }
+
+  const zona = el('div','firma');
+  if(fi){
+    zona.appendChild(el('div','firmada',
+      `<img src="${esc(fi.trazo_base64)}" alt="Firma">
+       <div class="dat">
+         <b>${esc(fi.nombre_asesor||S.nombre)}</b> · CC ${esc(fi.cc_asesor)}<br>
+         Firmada el ${fechaHora(fi.fecha_firma)} (hora de Colombia)<br>
+         ${fi.ip ? 'IP ' + esc(fi.ip) : ''}
+       </div>`));
+    if(fi.observaciones){
+      zona.appendChild(el('div',null,
+        `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--linea)">
+           <div style="font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);margin-bottom:5px">Observaciones del asesor</div>
+           <div style="font-size:13.5px;color:var(--tx2);white-space:pre-wrap">${esc(fi.observaciones)}</div>
+         </div>`));
+    }
+  }else if(firmable){
+    zona.appendChild(el('div',null,
+      `<div style="font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);margin-bottom:9px">Firma de aceptación</div>`));
+    const ta = el('textarea'); ta.placeholder = 'Observaciones (opcional)';
+    zona.appendChild(ta);
+    const cv = el('canvas','lienzo');
+    zona.appendChild(el('div',null,'<div style="height:11px"></div>'));
+    zona.appendChild(cv);
+    const acc = el('div','acc');
+    const bF  = el('button','btn mini','Acepto y firmo');
+    const bB  = el('button','btn mini sec','Borrar');
+    acc.appendChild(bF); acc.appendChild(bB);
+    zona.appendChild(acc);
+    const msg = el('div','nota',''); zona.appendChild(msg);
+
+    const lienzo = montarLienzo(cv);
+    bB.onclick = () => lienzo.borrar();
+    bF.onclick = async () => {
+      if(lienzo.vacio()){ msg.innerHTML = '<span style="color:var(--mal)">Dibuja tu firma en el recuadro antes de aceptar.</span>'; return; }
+      bF.disabled = true; bF.textContent = 'Guardando…';
+      const { error } = await sb.from('firmas').insert({
+        cc_asesor:S.cc, nombre_asesor:S.nombre, feedback_id:f.id,
+        trazo_base64:lienzo.png(), observaciones:ta.value.trim() || null,
+        user_agent:navigator.userAgent.slice(0,300)
+      });
+      if(error){
+        bF.disabled = false; bF.textContent = 'Acepto y firmo';
+        msg.innerHTML = `<span style="color:var(--mal)">No se pudo guardar la firma: ${esc(error.message)}. Intenta de nuevo.</span>`;
+        return;
+      }
+      await cargarServidor(); pintarTabs(); pintar();
+    };
+  }
+  c.appendChild(zona);
+  return c;
+}
+
+function montarLienzo(cv){
+  const ratio = window.devicePixelRatio || 1;
+  const ctx = cv.getContext('2d');
+  let pintado = false, dibujando = false;
+  function medir(){
+    const r = cv.getBoundingClientRect();
+    cv.width = r.width * ratio; cv.height = r.height * ratio;
+    ctx.scale(ratio, ratio);
+    ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#15161D';
+  }
+  requestAnimationFrame(medir);
+  const pos = e => {
+    const r = cv.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    return [p.clientX - r.left, p.clientY - r.top];
+  };
+  const abajo = e => { e.preventDefault(); dibujando = true; pintado = true; ctx.beginPath(); ctx.moveTo(...pos(e)); };
+  const mueve = e => { if(!dibujando) return; e.preventDefault(); ctx.lineTo(...pos(e)); ctx.stroke(); };
+  const arriba = () => { dibujando = false; };
+  cv.addEventListener('mousedown',abajo); cv.addEventListener('mousemove',mueve);
+  window.addEventListener('mouseup',arriba);
+  cv.addEventListener('touchstart',abajo,{passive:false});
+  cv.addEventListener('touchmove',mueve,{passive:false});
+  cv.addEventListener('touchend',arriba);
+  return {
+    vacio:  () => !pintado,
+    borrar: () => { ctx.clearRect(0,0,cv.width,cv.height); pintado = false; },
+    png:    () => cv.toDataURL('image/png')
+  };
+}
+
+/* ===================================================================== */
+/*  ASESOR · Mis metas                                                   */
+/* ===================================================================== */
+function vMetas(v){
+  v.appendChild(el('div','callout',
+    `<b>Estas metas son tuyas.</b> Escribe lo que quieres lograr con la comisión de este mes.
+     Tu supervisor no las ve: sirven para que tú midas para qué estás vendiendo.`));
+
+  const c = el('div','card p');
+  const f = el('div','mmeta');
+  const i1 = el('input'); i1.placeholder = 'Ej: cuota de la moto';
+  const i2 = el('input'); i2.placeholder = '$'; i2.inputMode = 'numeric'; i2.style.width = '130px';
+  const bt = el('button','btn mini','Agregar');
+  f.appendChild(el('div','campo','<label>¿Qué quieres lograr?</label>')).appendChild(i1);
+  f.appendChild(el('div','campo','<label>Cuánto</label>')).appendChild(i2);
+  f.appendChild(bt);
+  c.appendChild(f);
+  v.appendChild(c);
+
+  bt.onclick = async () => {
+    const n = i1.value.trim(), val = parseInt(String(i2.value).replace(/\D/g,''),10);
+    if(!n) return;
+    bt.disabled = true;
+    await sb.from('metas').insert({ cc_asesor:S.cc, nombre:n, valor:val||null, mes:S.mes });
+    await cargarServidor(); pintar();
+  };
+
+  if(!S.metas.length){
+    v.appendChild(el('div','card p vacio','Todavía no has escrito ninguna meta.'));
+    return;
+  }
+  const t = el('table','tbl');
+  t.innerHTML = '<thead><tr><th>Meta</th><th class="n">Valor</th><th>Mes</th><th></th></tr></thead>';
+  const tb = el('tbody');
+  S.metas.forEach(m => {
+    const tr = el('tr');
+    tr.innerHTML = `<td class="destaca">${esc(m.nombre)}</td>
+      <td class="n">${m.valor ? pes(m.valor) : '—'}</td>
+      <td style="color:var(--tx2)">${esc(m.mes||'')}</td><td></td>`;
+    const bx = el('button','btn mini sec','Quitar');
+    bx.onclick = async () => { await sb.from('metas').delete().eq('id', m.id); await cargarServidor(); pintar(); };
+    tr.lastElementChild.appendChild(bx);
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  const e = el('div','card envolt'); e.appendChild(t);
+  v.appendChild(e);
+
+  const suma = S.metas.reduce((s,m) => s + (m.valor||0), 0);
+  const mAct = S.agente.m[S.mes];
+  if(suma && mAct){
+    const falta = suma - mAct.total;
+    v.appendChild(el('div','nota', falta <= 0
+      ? `Tus metas suman ${pes(suma)} y tu comisión proyectada de ${esc(D.meses[S.mes].nombre)} es ${pes(mAct.total)}. <b>Te alcanza.</b>`
+      : `Tus metas suman ${pes(suma)} y tu comisión proyectada es ${pes(mAct.total)}: te faltarían <b>${pes(falta)}</b>.`));
+  }
+}
+
+/* ===================================================================== */
+/*  SUPERVISOR · Mi equipo                                               */
+/* ===================================================================== */
+let ordenCol = 'inst', ordenDir = -1;
+
+function vEquipo(v){
+  selectorMes(v);
+  const mk = S.mes, mes = D.meses[mk];
+  const filas = D.agentes.filter(a => a.m[mk]).map(a => {
+    const m = a.m[mk];
+    return {
+      cc:a.cc, nombre:a.nombre, tipo:a.tipo, equipo:a.equipo,
+      inst:m.inst, gest:m.gest, meta:m.meta, proy:m.proy, cumpl:m.cumpl,
+      digPct:m.digPct, dig:m.dig, ott:m.ott, total:m.total, pend:m.pend.length,
+      agendadas: m.pend.filter(p => p.est === 'AGENDADO').length,
+      firmasPend: S.feedback.filter(f => f.cc_asesor === a.cc && !firmaDe(f.id)).length
+    };
+  });
+
+  /* ------------------------------------------------------- resumen */
+  const tot = filas.reduce((s,f) => ({
+    inst:s.inst+f.inst, gest:s.gest+f.gest, meta:s.meta+f.meta,
+    proy:s.proy+f.proy, ott:s.ott+f.ott, total:s.total+f.total,
+    pend:s.pend+f.pend, dig:s.dig+f.dig, agendadas:s.agendadas+f.agendadas
+  }), {inst:0,gest:0,meta:0,proy:0,ott:0,total:0,pend:0,dig:0,agendadas:0});
+  const cumplEq = tot.meta ? tot.proy/tot.meta : 0;
+
+  const s0 = el('section','sec');
+  s0.appendChild(el('h3',null,`Equipo · ${esc(mes.nombre)}`));
+  const g = el('div','kpis');
+  g.appendChild(kpi('Instaladas del equipo', un1(tot.inst),
+    mes.cerrado ? 'Cierre del mes' : `Al corte del ${fechaCorta(D.corte)} · proyección ${un1(tot.proy)}`));
+  g.appendChild(kpi('Cumplimiento', pct(cumplEq), `Meta sumada del equipo: ${tot.meta}`));
+  g.appendChild(kpi('Contrato digital',
+    (tot.gest ? Math.round(100*tot.dig/tot.gest) : 0)+'<small>%</small>',
+    `${tot.dig} de ${tot.gest} ventas radicadas`));
+  g.appendChild(kpi('Agendadas por instalar', un1(tot.agendadas),
+    mes.cerrado ? 'Quedaron sin instalar' : 'Todavía pueden entrar este mes'));
+  g.appendChild(kpi('Ventas por revisar', un1(tot.pend), 'No instaladas en el mes'));
+  s0.appendChild(g);
+  v.appendChild(s0);
+
+  /* -------------------------------------------------------- tabla */
+  const s1 = el('section','sec');
+  s1.appendChild(el('h3',null,'Detalle por asesor'));
+
+  const cols = [
+    ['nombre','Asesor',''], ['equipo','Equipo',''],
+    ['inst','Instaladas','n'], ['gest','Gestionadas','n'], ['meta','Meta','n'],
+    ['proy','Proyección','n'], ['cumpl','Cumpl.','n'], ['digPct','% Digital','n'],
+    ['ott','OTT','n'], ['total','Comisión','n'], ['pend','Por revisar','n'], ['firmasPend','Firmas pend.','n']
+  ];
+  filas.sort((a,b) => {
+    const x = a[ordenCol], y = b[ordenCol];
+    return (typeof x === 'string' ? x.localeCompare(y) : x - y) * ordenDir;
+  });
+
+  const t = el('table','tbl');
+  const th = el('tr');
+  cols.forEach(([k,txt,cl]) => {
+    const h = el('th', (cl?cl+' ':'') + 'orden', esc(txt) + (ordenCol===k ? (ordenDir<0?' ↓':' ↑') : ''));
+    h.onclick = () => { if(ordenCol===k) ordenDir*=-1; else { ordenCol=k; ordenDir=-1; } pintar(); };
+    th.appendChild(h);
+  });
+  t.appendChild(el('thead')).appendChild(th);
+
+  const tb = el('tbody');
+  filas.forEach(f => {
+    const tr = el('tr');
+    tr.innerHTML = `
+      <td class="destaca">${esc(f.nombre)}</td>
+      <td><span class="tag n">${esc(f.equipo)}</span></td>
+      <td class="n destaca">${f.inst}</td>
+      <td class="n" style="color:var(--tx2)">${f.gest}</td>
+      <td class="n" style="color:var(--tx3)">${f.meta}</td>
+      <td class="n">${un1(f.proy)}</td>
+      <td class="n"><span class="tag ${semaforo(f.cumpl)==='ok'?'g':semaforo(f.cumpl)==='am'?'a':'r'}">${pct(f.cumpl)}</span></td>
+      <td class="n">${f.digPct}%</td>
+      <td class="n">${f.ott}</td>
+      <td class="n destaca">${pes(f.total)}</td>
+      <td class="n">${f.pend ? `<span class="tag a">${f.pend}</span>` : '<span style="color:var(--tx3)">0</span>'}</td>
+      <td class="n">${f.firmasPend ? `<span class="tag r">${f.firmasPend}</span>` : '<span style="color:var(--tx3)">0</span>'}</td>`;
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  const env = el('div','card envolt'); env.appendChild(t);
+  s1.appendChild(env);
+
+  const acc = el('div','acc');
+  const bx = el('button','btn mini sec','Exportar a Excel');
+  bx.onclick = () => exportarCSV(filas, cols, `equipo_${mk}`);
+  const bn = el('button','btn mini','Registrar retroalimentación');
+  bn.onclick = () => modalFeedback();
+  acc.appendChild(bn); acc.appendChild(bx);
+  s1.appendChild(acc);
+  v.appendChild(s1);
+
+  /* ------------------------------------------- ventas por revisar */
+  const s2 = el('section','sec');
+  s2.appendChild(el('h3',null,'Ventas por revisar del equipo'));
+  const pend = [];
+  D.agentes.forEach(a => {
+    const m = a.m[mk]; if(!m) return;
+    m.pend.forEach(p => pend.push({...p, asesor:a.nombre}));
+  });
+  if(!pend.length){
+    s2.appendChild(el('div','card p vacio','No hay ventas pendientes en el equipo este mes.'));
+  }else{
+    const porEst = {};
+    pend.forEach(p => porEst[p.est] = (porEst[p.est]||0) + 1);
+    s2.appendChild(el('div','callout',
+      `<b>${pend.length} ventas del equipo no están instaladas.</b> ` +
+      Object.entries(porEst).sort((a,b)=>b[1]-a[1]).map(([e,n]) => `${e}: ${n}`).join(' · ')));
+
+    const t2 = el('table','tbl');
+    t2.innerHTML = `<thead><tr><th>Asesor</th><th>Estado</th><th>Cédula cliente</th>
+      <th>Cliente</th><th>Ciudad</th><th>Fecha agenda</th><th>Motivo</th></tr></thead>`;
+    const tb2 = el('tbody');
+    pend.sort((a,b) => a.asesor.localeCompare(b.asesor) || a.ag.localeCompare(b.ag)).forEach(p => {
+      const tr = el('tr');
+      tr.innerHTML = `<td>${esc(p.asesor)}</td>
+        <td><span class="tag ${msgEstado(p.est).t}">${esc(p.est)}</span></td>
+        <td class="cc">${esc(p.cc||'—')}</td><td>${esc(p.nom||'—')}</td>
+        <td style="color:var(--tx2)">${esc(p.ciu||'—')}</td>
+        <td style="color:var(--tx2)">${fechaCorta(p.ag)}</td>
+        <td style="color:var(--tx3)">${esc(p.mot||'—')}</td>`;
+      tb2.appendChild(tr);
+    });
+    t2.appendChild(tb2);
+    const e2 = el('div','card envolt'); e2.appendChild(t2);
+    s2.appendChild(e2);
+
+    const b2 = el('button','btn mini sec','Exportar pendientes');
+    b2.style.marginTop = '11px';
+    b2.onclick = () => exportarCSV(pend,
+      [['asesor','Asesor'],['est','Estado'],['cc','Cedula cliente'],['nom','Cliente'],
+       ['ciu','Ciudad'],['ag','Fecha agenda'],['mot','Motivo'],['ot','OT']], `pendientes_${mk}`);
+    s2.appendChild(b2);
+  }
+  v.appendChild(s2);
+}
+
+function exportarCSV(filas, cols, nombre){
+  const cab = cols.map(c => c[1]).join(';');
+  const cuerpo = filas.map(f => cols.map(c => {
+    let v = f[c[0]];
+    if(typeof v === 'number' && c[0] === 'cumpl') v = Math.round(v*100) + '%';
+    return String(v ?? '').replace(/[;\r\n]/g,' ');
+  }).join(';')).join('\r\n');
+  const blob = new Blob(['﻿' + cab + '\r\n' + cuerpo], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${nombre}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ===================================================================== */
+/*  SUPERVISOR · Firmas del equipo                                       */
+/* ===================================================================== */
+function vFirmas(v){
+  const acc = el('div','acc'); acc.style.marginBottom = '18px';
+  const bn = el('button','btn mini','Registrar retroalimentación');
+  bn.onclick = () => modalFeedback();
+  acc.appendChild(bn);
+  const bi = el('button','btn mini sec','Imprimir soportes');
+  bi.onclick = () => window.print();
+  acc.appendChild(bi);
+  v.appendChild(acc);
+
+  if(!S.feedback.length){
+    v.appendChild(el('div','card p vacio',
+      'Todavía no has registrado retroalimentaciones. Usa el botón de arriba para crear la primera.'));
+    return;
+  }
+
+  const pend = S.feedback.filter(f => !firmaDe(f.id));
+  const fir  = S.feedback.filter(f =>  firmaDe(f.id));
+
+  const resumen = el('div','kpis'); resumen.style.marginBottom = '20px';
+  resumen.appendChild(kpi('Registradas', String(S.feedback.length), 'En total'));
+  resumen.appendChild(kpi('Firmadas', String(fir.length),
+    S.feedback.length ? pct(fir.length/S.feedback.length) + ' del total' : ''));
+  resumen.appendChild(kpi('Sin firmar', String(pend.length), 'Pendientes del equipo'));
+  v.appendChild(resumen);
+
+  if(pend.length){
+    const s = el('section','sec');
+    s.appendChild(el('h3',null,`Sin firmar (${pend.length})`));
+    pend.forEach(f => {
+      const c = tarjetaFeedback(f, false);
+      c.querySelector('.cab h4').insertAdjacentHTML('afterend',
+        `<div style="font-size:13px;color:var(--marca);font-weight:650">${esc(nombreDe(f.cc_asesor))}</div>`);
+      s.appendChild(c);
+    });
+    v.appendChild(s);
+  }
+  if(fir.length){
+    const s = el('section','sec');
+    s.appendChild(el('h3',null,`Firmadas (${fir.length})`));
+    fir.forEach(f => {
+      const c = tarjetaFeedback(f, false);
+      c.querySelector('.cab h4').insertAdjacentHTML('afterend',
+        `<div style="font-size:13px;color:var(--marca);font-weight:650">${esc(nombreDe(f.cc_asesor))}</div>`);
+      s.appendChild(c);
+    });
+    v.appendChild(s);
+  }
+}
+function nombreDe(cc){
+  const a = D.agentes.find(x => x.cc === cc);
+  return a ? a.nombre : cc;
+}
+
+/* ===================================================================== */
+/*  SUPERVISOR · Consolidado de notas                                    */
+/* ===================================================================== */
+function vNotas(v){
+  const c = el('div','card p'); c.style.marginBottom = '20px';
+  c.appendChild(el('div',null,'<h4 style="margin-bottom:12px">Nueva nota</h4>'));
+
+  const sel = el('select');
+  sel.style.cssText = 'width:100%;padding:11px 13px;border:1.5px solid var(--linea);border-radius:10px;background:#fff';
+  sel.innerHTML = '<option value="">— Todo el equipo —</option>' +
+    D.agentes.map(a => `<option value="${esc(a.cc)}">${esc(a.nombre)}</option>`).join('');
+  const ca = el('div','campo','<label>Sobre quién</label>'); ca.appendChild(sel);
+  c.appendChild(ca);
+
+  const ti = el('input');
+  ti.placeholder = 'Ej: seguimiento de agendamiento';
+  ti.style.cssText = 'width:100%;padding:11px 13px;border:1.5px solid var(--linea);border-radius:10px';
+  const ct = el('div','campo','<label>Asunto</label>'); ct.appendChild(ti);
+  c.appendChild(ct);
+
+  const tx = el('textarea'); tx.placeholder = 'Qué pasó, qué se acordó, qué sigue…';
+  const cx = el('div','campo','<label>Nota</label>'); cx.appendChild(tx);
+  c.appendChild(cx);
+
+  const bg = el('button','btn mini','Guardar nota');
+  const msg = el('div','nota','');
+  bg.onclick = async () => {
+    if(!tx.value.trim()){ msg.textContent = 'Escribe la nota antes de guardar.'; return; }
+    bg.disabled = true;
+    const { error } = await sb.from('notas').insert({
+      cc_supervisor:S.cc, cc_asesor:sel.value || null,
+      asunto:ti.value.trim() || 'Sin asunto', cuerpo:tx.value.trim()
+    });
+    bg.disabled = false;
+    if(error){ msg.innerHTML = `<span style="color:var(--mal)">No se pudo guardar: ${esc(error.message)}</span>`; return; }
+    ti.value = ''; tx.value = '';
+    await cargarServidor(); pintar();
+  };
+  c.appendChild(bg); c.appendChild(msg);
+  v.appendChild(c);
+
+  /* ------------------------- consolidado: notas + observaciones de firma */
+  const items = [
+    ...S.notas.map(n => ({
+      tipo:'Nota', fecha:n.creado_en, quien:n.cc_asesor ? nombreDe(n.cc_asesor) : 'Todo el equipo',
+      asunto:n.asunto, cuerpo:n.cuerpo, id:n.id, borrable:true
+    })),
+    ...S.firmas.filter(f => f.observaciones).map(f => {
+      const fb = S.feedback.find(x => x.id === f.feedback_id);
+      return {
+        tipo:'Observación del asesor', fecha:f.fecha_firma, quien:nombreDe(f.cc_asesor),
+        asunto:fb ? fb.titulo : 'Retroalimentación', cuerpo:f.observaciones, borrable:false
+      };
+    })
+  ].sort((a,b) => String(b.fecha).localeCompare(String(a.fecha)));
+
+  const s = el('section','sec');
+  s.appendChild(el('h3',null,`Consolidado (${items.length})`));
+  if(!items.length){
+    s.appendChild(el('div','card p vacio',
+      'Aquí se juntan tus notas y las observaciones que dejan los asesores al firmar. Todavía no hay ninguna.'));
+    v.appendChild(s);
+    return;
+  }
+  items.forEach(it => {
+    const card = el('div','card'); card.style.marginBottom = '11px';
+    const cab = el('div',null,
+      `<div style="padding:13px 16px 0;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
+         <span class="tag ${it.tipo==='Nota'?'n':'g'}">${esc(it.tipo)}</span>
+         <b style="font-size:14.5px">${esc(it.asunto)}</b>
+         <span style="font-size:12.5px;color:var(--marca);font-weight:650">${esc(it.quien)}</span>
+         <span style="font-size:12px;color:var(--tx3);margin-left:auto">${fechaHora(it.fecha)}</span>
+       </div>`);
+    card.appendChild(cab);
+    card.appendChild(el('div',null,
+      `<div style="padding:9px 16px 14px;white-space:pre-wrap;font-size:13.8px;color:var(--tx2);line-height:1.6">${esc(it.cuerpo)}</div>`));
+    if(it.borrable){
+      const b = el('button','btn mini sec','Eliminar');
+      b.style.cssText += ';margin:0 16px 14px';
+      b.onclick = async () => { await sb.from('notas').delete().eq('id', it.id); await cargarServidor(); pintar(); };
+      card.appendChild(b);
+    }
+    s.appendChild(card);
+  });
+  v.appendChild(s);
+
+  const b = el('button','btn mini sec','Exportar consolidado');
+  b.onclick = () => exportarCSV(items,
+    [['fecha','Fecha'],['tipo','Tipo'],['quien','Asesor'],['asunto','Asunto'],['cuerpo','Detalle']],
+    'consolidado_notas');
+  v.appendChild(b);
+}
+
+/* ===================================================================== */
+/*  Modal: registrar retroalimentación                                   */
+/* ===================================================================== */
+function modalFeedback(){
+  const m = el('div','modal');
+  const cont = el('div','cont'); const cuerpo = el('div');
+  cuerpo.appendChild(el('h3',null,'Registrar retroalimentación'));
+
+  const sel = el('select');
+  sel.style.cssText = 'width:100%;padding:11px 13px;border:1.5px solid var(--linea);border-radius:10px;background:#fff';
+  sel.innerHTML = D.agentes.map(a => `<option value="${esc(a.cc)}">${esc(a.nombre)}</option>`).join('');
+  const c1 = el('div','campo','<label>Asesor</label>'); c1.appendChild(sel); cuerpo.appendChild(c1);
+
+  const ti = el('input');
+  ti.style.cssText = 'width:100%;padding:11px 13px;border:1.5px solid var(--linea);border-radius:10px';
+  ti.placeholder = 'Ej: retroalimentación de agosto';
+  const c2 = el('div','campo','<label>Título</label>'); c2.appendChild(ti); cuerpo.appendChild(c2);
+
+  const pe = el('input');
+  pe.style.cssText = ti.style.cssText;
+  pe.value = D.meses[S.mes].nombre;
+  const c3 = el('div','campo','<label>Periodo</label>'); c3.appendChild(pe); cuerpo.appendChild(c3);
+
+  const cu = el('textarea'); cu.style.minHeight = '130px';
+  cu.placeholder = 'Qué se le reconoce, qué debe corregir y por qué.';
+  const c4 = el('div','campo','<label>Retroalimentación</label>'); c4.appendChild(cu); cuerpo.appendChild(c4);
+
+  const co = el('textarea');
+  co.placeholder = 'Compromisos concretos, uno por línea (opcional)';
+  const c5 = el('div','campo','<label>Compromisos</label>'); c5.appendChild(co); cuerpo.appendChild(c5);
+
+  const msg = el('div','nota','');
+  const acc = el('div','acc');
+  const bg = el('button','btn mini','Registrar');
+  const bc = el('button','btn mini sec','Cancelar');
+  acc.appendChild(bg); acc.appendChild(bc);
+  cuerpo.appendChild(acc); cuerpo.appendChild(msg);
+
+  bc.onclick = () => m.remove();
+  bg.onclick = async () => {
+    if(!ti.value.trim() || !cu.value.trim()){ msg.textContent = 'El título y la retroalimentación son obligatorios.'; return; }
+    bg.disabled = true; bg.textContent = 'Registrando…';
+    const { error } = await sb.from('feedback').insert({
+      cc_asesor:sel.value, cc_supervisor:S.cc, nombre_supervisor:S.nombre,
+      titulo:ti.value.trim(), periodo:pe.value.trim(),
+      cuerpo:cu.value.trim(), compromisos:co.value.trim() || null
+    });
+    if(error){
+      bg.disabled = false; bg.textContent = 'Registrar';
+      msg.innerHTML = `<span style="color:var(--mal)">No se pudo registrar: ${esc(error.message)}</span>`;
+      return;
+    }
+    m.remove();
+    await cargarServidor(); pintarTabs(); pintar();
+  };
+
+  cont.appendChild(cuerpo); m.appendChild(cont);
+  m.addEventListener('click', e => { if(e.target === m) m.remove(); });
+  $('#modales').appendChild(m);
+}
+
+/* ===================================================================== */
+/*  Sesión persistente                                                   */
+/* ===================================================================== */
+(async () => {
+  const { data } = await sb.auth.getSession();
+  if(data.session){
+    // Igual que en las políticas RLS: la cédula sale del email, no del metadata.
+    const cc = (data.session.user.email || '').split('@')[0];
+    const p = cc && buscarPersona(cc);
+    if(p){
+      S.user = data.session.user; S.cc = p.cc; S.rol = p.rol; S.nombre = p.nombre;
+      await entrar();
+    }
+  }
+})();
+</script>
+</body>
+</html>

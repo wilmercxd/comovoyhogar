@@ -1,0 +1,17 @@
+# index.html SI se versiona: Vercel lo necesita en el repo para desplegar
+# desde GitHub. Lleva dentro los KPIs del equipo y las cedulas de los
+# clientes, asi que EL REPOSITORIO TIENE QUE SER PRIVADO.
+
+# ventas.json no se sube: index.html ya lo lleva incrustado.
+ventas.json
+
+# Las sabanas crudas nunca entran al repositorio.
+*.csv
+!roster.csv
+!cierre_julio_oficial.csv
+
+*.xlsx
+*.pdf
+.vercel/
+.env
+.env.*
