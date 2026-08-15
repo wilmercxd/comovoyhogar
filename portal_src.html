@@ -258,22 +258,18 @@ textarea:focus{border-color:var(--marca);box-shadow:0 0 0 3px rgba(44,44,224,.12
   <div class="der">
     <div class="caja">
       <h2>Ingresa</h2>
-      <p>Tu usuario es tu cédula. La primera vez, la contraseña también.</p>
+      <p>Con tu cédula y tu segundo apellido. No necesitas correo ni contraseña.</p>
       <div class="aviso" id="loginMsg"></div>
       <form id="formLogin" autocomplete="off">
         <div class="campo">
           <label for="fCc">Cédula</label>
-          <input id="fCc" inputmode="numeric" autocomplete="username" required>
-        </div>
-        <div class="campo">
-          <label for="fPw">Contraseña</label>
-          <input id="fPw" type="password" autocomplete="current-password" required>
-          <div class="ayuda">La primera vez es tu misma cédula.</div>
+          <input id="fCc" inputmode="numeric" autocomplete="off" required>
+          <div class="ayuda">Sin puntos ni espacios.</div>
         </div>
         <div class="campo">
           <label for="fAp">Segundo apellido</label>
           <input id="fAp" autocomplete="off" required>
-          <div class="ayuda">Solo para confirmar que eres tú.</div>
+          <div class="ayuda">El último de tu documento. No importan las tildes.</div>
         </div>
         <button class="btn" type="submit" id="btnEntrar">Entrar</button>
       </form>
@@ -389,40 +385,38 @@ function buscarPersona(cc){
   return a ? {cc:a.cc, nombre:a.nombre, ap2:a.ap2, rol:'ASESOR'} : null;
 }
 
+// La contraseña no se pide: se deriva. Tiene que dar exactamente lo mismo
+// que clave_de() en supabase/cuentas.sql.
+const claveDe = (cc, ap2) => `${cc}.${ap2}`;
+
 $('#formLogin').addEventListener('submit', async e => {
   e.preventDefault();
-  const cc = $('#fCc').value.trim(), pw = $('#fPw').value, ap = $('#fAp').value.trim();
+  const cc = $('#fCc').value.replace(/\D/g,''), ap = $('#fAp').value.trim();
   const btn = $('#btnEntrar');
   msgLogin('');
 
   const p = buscarPersona(cc);
   if(!p){ return msgLogin('Esa cédula no está en el equipo de Hogar. Revísala o escríbele a tu supervisor.'); }
-  if(norm(ap) !== p.ap2){ return msgLogin('El segundo apellido no coincide con el de tu cédula. Escríbelo tal como aparece en tu documento.'); }
+  if(norm(ap) !== p.ap2){ return msgLogin('El segundo apellido no coincide con el de esa cédula. Escribe el último apellido de tu documento.'); }
 
   btn.disabled = true; btn.textContent = 'Entrando…';
   try{
-    let { data, error } = await sb.auth.signInWithPassword({ email:`${cc}@${DOMINIO}`, password:pw });
-
-    // Primer ingreso: se crea la cuenta con la cédula como contraseña.
-    if(error && pw === cc){
-      const r = await sb.auth.signUp({
-        email:`${cc}@${DOMINIO}`, password:pw,
-        options:{ data:{ cc, nombre:p.nombre, rol:p.rol } }
-      });
-      if(!r.error){
-        const r2 = await sb.auth.signInWithPassword({ email:`${cc}@${DOMINIO}`, password:pw });
-        data = r2.data; error = r2.error;
-      }
-    }
+    // Las cuentas se crean desde supabase/cuentas.sql: aquí nunca se registra a nadie.
+    const { data, error } = await sb.auth.signInWithPassword({
+      email: `${cc}@${DOMINIO}`, password: claveDe(cc, p.ap2)
+    });
     if(error) throw error;
 
     S.user = data.user; S.cc = cc; S.rol = p.rol; S.nombre = p.nombre;
     await entrar();
   }catch(err){
     const m = String(err.message||err);
-    if(/Invalid login/i.test(m))        msgLogin('Contraseña incorrecta. Si nunca has entrado, usa tu cédula como contraseña.');
-    else if(/Failed to fetch/i.test(m)) msgLogin('No hay conexión con el servidor. Revisa tu internet y vuelve a intentar.');
-    else                                msgLogin('No se pudo entrar: ' + m);
+    if(/Invalid login|Email not confirmed/i.test(m))
+      msgLogin('Tus datos están bien, pero tu cuenta todavía no está creada en el servidor. Avísale a tu supervisor para que corra el alta.');
+    else if(/Failed to fetch|NetworkError/i.test(m))
+      msgLogin('No hay conexión con el servidor. Revisa tu internet y vuelve a intentar.');
+    else
+      msgLogin('No se pudo entrar: ' + m);
   }finally{
     btn.disabled = false; btn.textContent = 'Entrar';
   }

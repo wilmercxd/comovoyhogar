@@ -68,10 +68,46 @@ cuatro semanas, cada una en su propio piso). El bono semanal arranca en agosto d
 
 Proyecto: `mrmtprhaoilwzwghzdqn`
 
-1. SQL Editor → pegar y ejecutar `supabase/schema.sql` completo. Es idempotente.
-2. Authentication → Providers → Email: **desactivar "Confirm email"**. Las cuentas usan
-   un correo sintético `{cedula}@como-voy.local` que nunca va a recibir un mensaje.
-3. Listo. El primer ingreso de cada persona crea su cuenta con la cédula como contraseña.
+1. SQL Editor → ejecutar `supabase/schema.sql` completo (tablas, RLS y equipo).
+2. SQL Editor → ejecutar `supabase/cuentas.sql` completo (cuentas de acceso).
+
+Ambos son idempotentes. No hay que tocar nada en el dashboard.
+
+### Cómo entra la gente
+
+Solo dos datos: **cédula y segundo apellido**. Sin correo y sin contraseña.
+
+Supabase necesita igual un usuario con email y contraseña por debajo para emitir el JWT
+que hace funcionar RLS, así que `cuentas.sql` las crea ya confirmadas:
+
+| | |
+|---|---|
+| Email | `{cedula}@como-voy.local` — sintético, nunca recibe nada |
+| Contraseña | `{cedula}.{SEGUNDO APELLIDO}` — derivada, nadie la escribe |
+
+El portal calcula esa clave solo, con la misma regla que `clave_de()` en el SQL:
+mayúsculas, sin tildes y con Ñ como N, para que *Muñoz*, *muñoz* y *MUNOZ* funcionen igual.
+
+Como las cuentas se crean desde SQL, el portal **nunca llama a `signUp()`** y el ajuste
+"Confirm email" del dashboard no afecta el login.
+
+### Dar de alta a alguien nuevo
+
+1. Agregarlo a `roster.csv` (con su tipo de meta).
+2. Agregarlo al `insert` del paso 9 de `schema.sql` y ejecutar ese bloque.
+3. Volver a ejecutar `cuentas.sql` completo.
+4. Regenerar y volver a publicar.
+
+Al final de `cuentas.sql` hay una consulta que lista, para cada persona, qué apellido
+tiene que escribir y si su cuenta quedó bien creada.
+
+### Sobre este modelo de acceso
+
+Cédula y apellido son datos que circulan dentro del piso: quien los sepa puede entrar
+como otro. Es una decisión consciente a cambio de que nadie tenga que recordar una
+contraseña. Lo que sostiene la seguridad real es el **Deployment Protection de Vercel**,
+que es la puerta de antes. Si en algún momento hace falta más, el camino es un OTP al
+correo corporativo, no volver a pedir contraseña.
 
 ### Tablas
 
@@ -153,7 +189,7 @@ rótala en Supabase → Settings → API Keys.
 - [ ] `generar_datos.ps1` terminó sin errores en rojo
 - [ ] Ningún asesor con instaladas > 0 y comisión en $0 sin explicación
 - [ ] Las instaladas de un par de asesores cuadran contra la sábana
-- [ ] Entrar como asesor, firmar, salir y volver a entrar desde otro navegador
+- [ ] Entrar con cédula y segundo apellido, firmar, salir y volver a entrar desde otro navegador
 - [ ] El supervisor ve esa firma
 - [ ] La hora de la firma es hora de Colombia, no UTC
 - [ ] Deployment Protection sigue activa
@@ -171,5 +207,7 @@ rótala en Supabase → Settings → API Keys.
 | Un asesor sale dos veces | Mojibake en los nombres. Se agrupa siempre por cédula, nunca por nombre |
 | KPIs en cero sin explicación | El nombre de una columna cambió entre exportes. Las columnas se resuelven ignorando espacios y mayúsculas |
 | «row violates row-level security» al firmar | La cédula de la sesión no coincide con la del feedback, o no se ejecutó el `schema.sql` completo |
+| «tu cuenta todavía no está creada» al entrar | Falta ejecutar `cuentas.sql`, o la persona se agregó a `roster.csv` pero no a `usuarios` |
+| Alguien no entra y jura que el apellido está bien | Correr la consulta del final de `cuentas.sql`: muestra exactamente qué apellido espera el sistema para esa cédula |
 
 Un error que produce ceros es peor que uno que rompe: nadie lo nota.
