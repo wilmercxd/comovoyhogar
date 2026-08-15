@@ -75,21 +75,18 @@ Ambos son idempotentes. No hay que tocar nada en el dashboard.
 
 ### Cómo entra la gente
 
-Solo dos datos: **cédula y segundo apellido**. Sin correo y sin contraseña.
+Tres campos: **cédula, contraseña y segundo apellido**.
 
-Supabase necesita igual un usuario con email y contraseña por debajo para emitir el JWT
-que hace funcionar RLS, así que `cuentas.sql` las crea ya confirmadas:
+**La contraseña es la misma cédula.** La pantalla no lo dice: eso se explica en la
+inducción. El segundo apellido se valida contra el roster antes de tocar el servidor.
 
-| | |
-|---|---|
-| Email | `{cedula}@como-voy.local` — sintético, nunca recibe nada |
-| Contraseña | `{cedula}.{SEGUNDO APELLIDO}` — derivada, nadie la escribe |
+El correo es sintético (`{cedula}@como-voy.local`) y nunca recibe nada; existe solo
+porque Supabase necesita un usuario con email y contraseña por debajo para emitir el JWT
+que hace funcionar RLS. `cuentas.sql` las crea ya confirmadas, así que el portal **nunca
+llama a `signUp()`** y el ajuste "Confirm email" del dashboard no afecta el login.
 
-El portal calcula esa clave solo, con la misma regla que `clave_de()` en el SQL:
-mayúsculas, sin tildes y con Ñ como N, para que *Muñoz*, *muñoz* y *MUNOZ* funcionen igual.
-
-Como las cuentas se crean desde SQL, el portal **nunca llama a `signUp()`** y el ajuste
-"Confirm email" del dashboard no afecta el login.
+Para cambiarle la contraseña a alguien, edita `clave_de()` en `cuentas.sql` y vuelve a
+ejecutarlo.
 
 ### Dar de alta a alguien nuevo
 
@@ -103,11 +100,11 @@ tiene que escribir y si su cuenta quedó bien creada.
 
 ### Sobre este modelo de acceso
 
-Cédula y apellido son datos que circulan dentro del piso: quien los sepa puede entrar
-como otro. Es una decisión consciente a cambio de que nadie tenga que recordar una
-contraseña. Lo que sostiene la seguridad real es el **Deployment Protection de Vercel**,
-que es la puerta de antes. Si en algún momento hace falta más, el camino es un OTP al
-correo corporativo, no volver a pedir contraseña.
+Los tres datos (cédula, cédula otra vez y apellido) circulan dentro del piso: quien los
+sepa puede entrar como otro. Es una decisión consciente a cambio de que nadie tenga que
+recordar una contraseña nueva. Lo que sostiene la seguridad real es el **Deployment
+Protection de Vercel**, que es la puerta de antes. Si en algún momento hace falta más,
+el camino es un OTP al correo corporativo.
 
 ### Tablas
 
@@ -207,7 +204,8 @@ rótala en Supabase → Settings → API Keys.
 | Un asesor sale dos veces | Mojibake en los nombres. Se agrupa siempre por cédula, nunca por nombre |
 | KPIs en cero sin explicación | El nombre de una columna cambió entre exportes. Las columnas se resuelven ignorando espacios y mayúsculas |
 | «row violates row-level security» al firmar | La cédula de la sesión no coincide con la del feedback, o no se ejecutó el `schema.sql` completo |
-| «tu cuenta todavía no está creada» al entrar | Falta ejecutar `cuentas.sql`, o la persona se agregó a `roster.csv` pero no a `usuarios` |
+| «Database error querying schema» al entrar | Una cuenta de `auth.users` quedó con campos de token en `NULL`; GoTrue los lee como texto y revienta. Lo arregla el bloque de reparación al final de `cuentas.sql` |
+| «tu cuenta todavía no está lista» al entrar | Falta ejecutar `cuentas.sql`, o la persona se agregó a `roster.csv` pero no a `usuarios` |
 | Alguien no entra y jura que el apellido está bien | Correr la consulta del final de `cuentas.sql`: muestra exactamente qué apellido espera el sistema para esa cédula |
 
 Un error que produce ceros es peor que uno que rompe: nadie lo nota.

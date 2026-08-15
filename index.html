@@ -258,13 +258,17 @@ textarea:focus{border-color:var(--marca);box-shadow:0 0 0 3px rgba(44,44,224,.12
   <div class="der">
     <div class="caja">
       <h2>Ingresa</h2>
-      <p>Con tu cédula y tu segundo apellido. No necesitas correo ni contraseña.</p>
+      <p>Entra con tu cédula para ver cómo vas este mes.</p>
       <div class="aviso" id="loginMsg"></div>
       <form id="formLogin" autocomplete="off">
         <div class="campo">
           <label for="fCc">Cédula</label>
           <input id="fCc" inputmode="numeric" autocomplete="off" required>
           <div class="ayuda">Sin puntos ni espacios.</div>
+        </div>
+        <div class="campo">
+          <label for="fPw">Contraseña</label>
+          <input id="fPw" type="password" autocomplete="off" required>
         </div>
         <div class="campo">
           <label for="fAp">Segundo apellido</label>
@@ -385,13 +389,11 @@ function buscarPersona(cc){
   return a ? {cc:a.cc, nombre:a.nombre, ap2:a.ap2, rol:'ASESOR'} : null;
 }
 
-// La contraseña no se pide: se deriva. Tiene que dar exactamente lo mismo
-// que clave_de() en supabase/cuentas.sql.
-const claveDe = (cc, ap2) => `${cc}.${ap2}`;
-
 $('#formLogin').addEventListener('submit', async e => {
   e.preventDefault();
-  const cc = $('#fCc').value.replace(/\D/g,''), ap = $('#fAp').value.trim();
+  const cc = $('#fCc').value.replace(/\D/g,'');
+  const pw = $('#fPw').value;
+  const ap = $('#fAp').value.trim();
   const btn = $('#btnEntrar');
   msgLogin('');
 
@@ -403,7 +405,7 @@ $('#formLogin').addEventListener('submit', async e => {
   try{
     // Las cuentas se crean desde supabase/cuentas.sql: aquí nunca se registra a nadie.
     const { data, error } = await sb.auth.signInWithPassword({
-      email: `${cc}@${DOMINIO}`, password: claveDe(cc, p.ap2)
+      email: `${cc}@${DOMINIO}`, password: pw
     });
     if(error) throw error;
 
@@ -411,8 +413,10 @@ $('#formLogin').addEventListener('submit', async e => {
     await entrar();
   }catch(err){
     const m = String(err.message||err);
-    if(/Invalid login|Email not confirmed/i.test(m))
-      msgLogin('Tus datos están bien, pero tu cuenta todavía no está creada en el servidor. Avísale a tu supervisor para que corra el alta.');
+    if(/Invalid login/i.test(m))
+      msgLogin('Contraseña incorrecta. Si no la recuerdas, pídesela a tu supervisor.');
+    else if(/Database error|Email not confirmed/i.test(m))
+      msgLogin('Tu cuenta todavía no está lista en el servidor. Avísale a tu supervisor.');
     else if(/Failed to fetch|NetworkError/i.test(m))
       msgLogin('No hay conexión con el servidor. Revisa tu internet y vuelve a intentar.');
     else
