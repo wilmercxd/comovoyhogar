@@ -78,7 +78,7 @@ function Dias-Habiles([datetime]$ini,[datetime]$fin){
 
 # ---------------------------------------------------------- esquema de pago
 # Tomado de COMISIONES AGOSTO.pdf. escalones = [ventas_desde, valor_por_venta]
-$ESQUEMA = [ordered]@{
+$ESQ_TIPO = [ordered]@{
   OUTBOUND = [ordered]@{
     nombre = 'Outbound'
     mes    = @(@(20,10000),@(25,15000),@(30,20000))
@@ -89,6 +89,16 @@ $ESQUEMA = [ordered]@{
     mes    = @(@(30,15000),@(35,20000),@(40,25000))
     sem    = @(@(8,15000),@(10,20000),@(12,25000))
   }
+}
+
+# Desde agosto de 2026 el esquema se unifica: todos los asesores van por el de
+# Omnicanal (mes 30/35/40, semana 8/10/12), sin importar si su tipo de meta es
+# OUTBOUND o BLASTER. Julio conserva el esquema por tipo con el que se cerro.
+$MES_UNIFICADO = '2026-08'
+
+function Esquema([string]$mk, [string]$tipo) {
+  if ($mk -ge $MES_UNIFICADO) { return $ESQ_TIPO.BLASTER }
+  return $ESQ_TIPO[$tipo]
 }
 function Piso($escalones,[double]$ventas){
   $piso = 0; $tarifa = 0
@@ -126,7 +136,7 @@ $porCC = @{}
 foreach ($a in $asesores) {
   $cc = $a.cedula.Trim()
   if ($porCC.ContainsKey($cc)) { Err "cedula repetida en el roster: $cc" }
-  if ($a.tipo -notin $ESQUEMA.Keys) { Err "tipo de meta desconocido para $($a.nombre): '$($a.tipo)'" }
+  if ($a.tipo -notin $ESQ_TIPO.Keys) { Err "tipo de meta desconocido para $($a.nombre): '$($a.tipo)'" }
   $porCC[$cc] = $a
 }
 
@@ -323,12 +333,12 @@ $agentesJson = @()
 
 foreach ($a in ($asesores | Sort-Object nombre)) {
   $cc  = $a.cedula.Trim()
-  $esq = $ESQUEMA[$a.tipo]
   $mis = @($todas | Where-Object { $_.cc -eq $cc })
   $mJson = [ordered]@{}
 
   foreach ($mk in $clavesMes) {
     $info = $mesesInfo[$mk]
+    $esq  = Esquema $mk $a.tipo
     $delMes = @($mis | Where-Object { $_.agenda.ToString('yyyy-MM') -eq $mk })
     if ($delMes.Count -eq 0) { continue }
 
@@ -402,6 +412,7 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
     }
 
     $mJson[$mk] = [ordered]@{
+      esq    = $esq.nombre
       inst   = $iTot
       instC  = $iCorte
       gest   = $delMes.Count
@@ -440,7 +451,7 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
     nombre = $a.nombre.Trim()
     ap2    = (Norm (Ap2 $a.nombre))
     tipo   = $a.tipo
-    equipo = $esq.nombre
+    equipo = $ESQ_TIPO[$a.tipo].nombre    # su tipo base; el del mes va en m[mes].esq
     ing    = if ($a.ingreso) { (Get-Fecha $a.ingreso).ToString('yyyy-MM-dd') } else { $null }
     m      = $mJson
   }
@@ -449,6 +460,17 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
 }
 
 # ==================================================================== SALIDA
+# El esquema va indexado por mes: en agosto cambia para todos, y el portal
+# tiene que poder mostrar julio con las reglas con las que julio se cerro.
+$esqJson = [ordered]@{}
+foreach ($mk in $clavesMes) {
+  $esqJson[$mk] = [ordered]@{}
+  foreach ($t in $ESQ_TIPO.Keys) { $esqJson[$mk][$t] = Esquema $mk $t }
+  $uni = ((Esquema $mk 'OUTBOUND').nombre -eq (Esquema $mk 'BLASTER').nombre)
+  $esqJson[$mk]['unificado'] = $uni
+  if ($uni) { Ok "$mk usa un solo esquema para todo el equipo: $((Esquema $mk 'OUTBOUND').nombre)" }
+}
+
 $doc = [ordered]@{
   corte    = $fCorte.ToString('yyyy-MM-dd')
   generado = (Get-Date).ToString('yyyy-MM-dd HH:mm')
@@ -456,7 +478,7 @@ $doc = [ordered]@{
   sup      = [ordered]@{
     cc=$sup.cedula.Trim(); nombre=$sup.nombre.Trim(); ap2=(Norm (Ap2 $sup.nombre))
   }
-  esquema  = $ESQUEMA
+  esquema  = $esqJson
   meses    = $mesesJson
   agentes  = $agentesJson
 }

@@ -432,13 +432,12 @@ async function entrar(){
   $('#login').classList.add('oculto');
   $('#app').classList.remove('oculto');
   $('#qNombre').textContent = S.nombre;
-  $('#qRol').textContent = S.rol === 'SUPERVISOR'
-    ? 'Supervisor · corte ' + fechaCorta(D.corte)
-    : (S.agente ? S.agente.equipo : '') + ' · corte ' + fechaCorta(D.corte);
+  $('#qRol').textContent = (S.rol === 'SUPERVISOR' ? 'Supervisor' : 'Claro Hogar')
+    + ' · corte ' + fechaCorta(D.corte);
 
   if(S.rol === 'ASESOR'){
     S.agente = D.agentes.find(a => a.cc === S.cc);
-    $('#qRol').textContent = S.agente.equipo + ' · corte ' + fechaCorta(D.corte);
+    $('#qRol').textContent = 'Claro Hogar · corte ' + fechaCorta(D.corte);
     S.tab = 'desempeno';
   }else{
     S.tab = 'equipo';
@@ -521,7 +520,8 @@ function vDesempeno(v){
     return;
   }
 
-  const esq  = D.esquema[a.tipo];
+  // El esquema depende del mes: desde agosto todo el equipo va por el mismo.
+  const esq  = D.esquema[mk][a.tipo];
   const prev = MESES[MESES.indexOf(mk)-1];
   const ant  = prev ? a.m[prev] : null;
 
@@ -623,6 +623,11 @@ function vDesempeno(v){
   });
   der.appendChild(e);
 
+  if(D.esquema[mk].unificado){
+    der.appendChild(el('div','nota',
+      `En ${esc(mes.corto)} estos pisos aplican para todo el equipo por igual, sin importar si tu meta es Outbound o Blaster.`));
+  }
+
   if(m.sigEsc && !mes.cerrado){
     const faltan = Math.ceil(m.sigEsc[0] - m.proy);
     der.appendChild(el('div','nota',
@@ -687,7 +692,7 @@ function vDesempeno(v){
     `Las semanas van de lunes a sábado y no se cuentan los domingos ni los festivos${
       mes.festivos.length ? ' (' + mes.festivos.map(f => fechaCorta(f.f)).join(' y ') + ')' : ''
     }. El mínimo de cada semana es fijo, no se prorratea por días laborados.${
-      mes.bonoSem ? ' Pisos de tu equipo por semana: ' + escSem + '.' : ''}`));
+      mes.bonoSem ? ' Pisos por semana: ' + escSem + '.' : ''}`));
   v.appendChild(s3);
 
   /* ---------------------------------------------------------- 4. OTT */
@@ -1016,7 +1021,7 @@ function vEquipo(v){
   const filas = D.agentes.filter(a => a.m[mk]).map(a => {
     const m = a.m[mk];
     return {
-      cc:a.cc, nombre:a.nombre, tipo:a.tipo, equipo:a.equipo,
+      cc:a.cc, nombre:a.nombre, tipo:a.tipo, equipo:m.esq || a.equipo,
       inst:m.inst, gest:m.gest, meta:m.meta, proy:m.proy, cumpl:m.cumpl,
       digPct:m.digPct, dig:m.dig, ott:m.ott, total:m.total, pend:m.pend.length,
       agendadas: m.pend.filter(p => p.est === 'AGENDADO').length,
