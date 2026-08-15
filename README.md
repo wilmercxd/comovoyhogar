@@ -44,9 +44,31 @@ Si omites `-Corte`, se toma la fecha de agenda más reciente con estado instalad
 | Semáforo | ≥85 % verde · 70–84 % ámbar · <70 % rojo |
 | % contrato digital | Columna `CONTRATO = Digital` sobre el total radicado del mes |
 | OTT | Columna `ADICIONAL`, solo streaming, sobre ventas instaladas |
-| Ventas duplicadas | Se deduplica por `N°OT`; gana el archivo más reciente |
+| Ventas duplicadas | Se deduplica por `N°OT`; gana la sábana de corte más reciente |
+| Qué sábana es más reciente | La fecha del **nombre** del archivo, nunca la del sistema |
+| Meses ya cerrados | No se modifican por sábanas posteriores |
 
 Un mes cerrado no se proyecta: julio muestra su cierre definitivo.
+
+### Cómo se combinan varias sábanas
+
+Las sábanas se acumulan en la carpeta: el generador las lee todas y deduplica por `N°OT`.
+Dos reglas gobiernan quién gana, y las dos importan:
+
+**1. El orden sale de la fecha del nombre del archivo** (`SABANA HOGAR_dd_mm_aaaa`), no de
+la fecha de modificación. La fecha del sistema es la de cuándo se descargó el archivo, no
+la del corte que contiene: si se baja una sábana vieja después de una nueva, ordenar por
+ella hace que la vieja le sobrescriba los estados a la nueva y las ventas recientes
+desaparezcan sin que nadie lo note.
+
+**2. Un mes ya cerrado conserva el estado de su sábana de cierre.** Que una OT de julio
+cambie de estado en la sábana de agosto no puede mover el cierre de julio, que ya se
+comunicó y se pagó.
+
+La condición de la regla 2 se evalúa sobre la **fecha de agenda nueva**. Una venta que
+quedó `NO INSTALADO` el 31/07 y se reagendó al 06/08 es una venta de agosto: en julio no
+contaba, así que no le resta nada, y tiene que sumar en agosto. Congelarla por haber
+aparecido antes en la sábana de julio la haría desaparecer de los dos meses.
 
 ### Metas y comisión
 
@@ -201,6 +223,8 @@ rótala en Supabase → Settings → API Keys.
 | Todo sale sin firmar en la vista del supervisor | La consulta de firmas está filtrando por cédula. El supervisor no tiene firmas propias: hay que cargar sin filtro y dejar que RLS acote |
 | La hora de la firma va 5 horas adelantada | Postgres devuelve UTC sin marca de zona y el navegador la lee como local. Hay que agregar la `Z` y formatear con `timeZone` explícito |
 | Faltan ventas de los días recientes | El export mezcla fechas de texto con seriales de Excel (46246 = 12/08/2026). El parser acepta ambos |
+| Bajan las instaladas de un mes al meter una sábana nueva | Una sábana vieja está ganando la deduplicación. Verificar la línea `corte aaaa-mm-dd` que imprime el generador por archivo: tiene que ir en orden ascendente |
+| El día del corte muestra muy pocas instaladas | Normal: los estados de instalación llegan con un día de rezago. El día del corte siempre sale subestimado y se completa al día siguiente |
 | Un asesor sale dos veces | Mojibake en los nombres. Se agrupa siempre por cédula, nunca por nombre |
 | KPIs en cero sin explicación | El nombre de una columna cambió entre exportes. Las columnas se resuelven ignorando espacios y mayúsculas |
 | «row violates row-level security» al firmar | La cédula de la sesión no coincide con la del feedback, o no se ejecutó el `schema.sql` completo |

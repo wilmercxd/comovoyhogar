@@ -165,10 +165,26 @@ $COLS = @{
 }
 
 # Una OT puede venir en dos cortes distintos: gana la del archivo mas reciente.
-$ventas   = @{}
-$sinFecha = 0
+#
+# El orden sale de la fecha del NOMBRE (SABANA HOGAR_dd_mm_aaaa), nunca de
+# LastWriteTime: la fecha del sistema es la de cuando se bajo o se copio el
+# archivo, no la del corte que contiene. Ordenando por LastWriteTime, una
+# sabana vieja descargada despues le sobrescribe los estados a una nueva y
+# las ventas recientes desaparecen sin que nadie lo note.
+function Fecha-Archivo($archivo) {
+  if ($archivo.Name -match '(\d{1,2})[_-](\d{1,2})[_-](\d{4})') {
+    try { return [datetime]::new([int]$Matches[3], [int]$Matches[2], [int]$Matches[1]) } catch {}
+  }
+  Avi "$($archivo.Name): el nombre no trae fecha, se ordena por fecha de archivo"
+  return $archivo.LastWriteTime
+}
 
-foreach ($f in ($archivos | Sort-Object LastWriteTime)) {
+$ventas     = @{}
+$sinFecha   = 0
+$congeladas = 0
+
+foreach ($f in ($archivos | Sort-Object @{ Expression = { Fecha-Archivo $_ } })) {
+  $fArchivo = Fecha-Archivo $f
   $filas = Import-Csv $f.FullName -Delimiter ';'
   if ($filas.Count -eq 0) { Avi "$($f.Name) esta vacio"; continue }
 
@@ -187,7 +203,22 @@ foreach ($f in ($archivos | Sort-Object LastWriteTime)) {
     $ot = "$(Get-Col $r $COLS.ot)".Trim()
     $clave = if ($ot) { "OT$ot" } else { "X{0}|{1}|{2}" -f $cc, $fa.ToString('yyyyMMdd'), "$(Get-Col $r $COLS.cliCC)".Trim() }
 
+    # Un mes ya cerrado no se vuelve a tocar: su cierre ya se comunico y se
+    # pago. Si una OT de julio cambia de estado en la sabana de agosto, el
+    # cierre de julio no se mueve.
+    #
+    # La condicion se evalua sobre la agenda NUEVA, no la anterior. Una venta
+    # que quedo NO INSTALADO el 31/07 y se reagendo al 06/08 es una venta de
+    # agosto: no le resta nada a julio (alli no contaba) y tiene que sumar en
+    # agosto. Congelarla por haber aparecido antes en la sabana de julio la
+    # haria desaparecer de los dos meses.
+    if ($ventas.ContainsKey($clave)) {
+      $finMes = $fa.AddDays(1 - $fa.Day).AddMonths(1).AddDays(-1)
+      if ($ventas[$clave].arch -ge $finMes) { $congeladas++; continue }
+    }
+
     $ventas[$clave] = [pscustomobject]@{
+      arch    = $fArchivo
       cc      = $cc
       estado  = "$(Get-Col $r $COLS.estado)".Trim().ToUpperInvariant()
       motivo  = "$(Get-Col $r $COLS.motivo)".Trim()
@@ -208,10 +239,11 @@ foreach ($f in ($archivos | Sort-Object LastWriteTime)) {
     }
     $tomadas++
   }
-  Ok "$($f.Name): $tomadas filas del equipo"
+  Ok ("{0,-42} corte {1}  {2} filas del equipo" -f $f.Name, (Fecha-Archivo $f).ToString('yyyy-MM-dd'), $tomadas)
 }
 
-if ($sinFecha -gt 0) { Avi "$sinFecha filas descartadas: FECHA AGENDA vacia o ilegible" }
+if ($sinFecha -gt 0)   { Avi "$sinFecha filas descartadas: FECHA AGENDA vacia o ilegible" }
+if ($congeladas -gt 0) { Ok  "$congeladas ventas de meses ya cerrados conservan el estado de su sabana de cierre" }
 if ($ventas.Count -eq 0) { throw 'Ninguna venta del equipo quedo cargada' }
 Ok "$($ventas.Count) ventas unicas (deduplicadas por N°OT)"
 
