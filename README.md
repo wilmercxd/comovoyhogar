@@ -72,17 +72,32 @@ aparecido antes en la sábana de julio la haría desaparecer de los dos meses.
 
 ### Metas y comisión
 
-El tipo de meta de cada asesor está en `roster.csv` (`OUTBOUND` u omnicanal, aquí
-`BLASTER`). Los escalones salen de *COMISIONES AGOSTO.pdf*:
+**El esquema depende del mes, no solo del tipo de asesor.** Lo resuelve la función
+`Esquema($mes, $tipo)` del generador y se emite en el JSON indexado por mes, para que
+el portal pueda mostrar cada mes con las reglas con las que se cerró.
 
-| Piso | Outbound · mes | Outbound · semana | Omnicanal · mes | Omnicanal · semana |
-|---|---|---|---|---|
-| 1 | 20 · $10.000 | 6 · $10.000 | 30 · $15.000 | 8 · $15.000 |
-| 2 | 25 · $15.000 | 8 · $15.000 | 35 · $20.000 | 10 · $20.000 |
-| 3 | 30 · $20.000 | 10 · $20.000 | 40 · $25.000 | 12 · $25.000 |
+**Hasta julio de 2026** — cada quien por su tipo, según `roster.csv`:
+
+| Piso | Outbound · mes | Omnicanal (`BLASTER`) · mes |
+|---|---|---|
+| 1 | 20 · $10.000 | 30 · $15.000 |
+| 2 | 25 · $15.000 | 35 · $20.000 |
+| 3 | 30 · $20.000 | 40 · $25.000 |
+
+**Desde agosto de 2026** — esquema unificado: todo el equipo va por el de Omnicanal, sin
+importar su tipo de meta. Es lo que controla la constante `$MES_UNIFICADO`.
+
+| Piso | Mes | Semana |
+|---|---|---|
+| 1 | 30 · $15.000 | 8 · $15.000 |
+| 2 | 35 · $20.000 | 10 · $20.000 |
+| 3 | 40 · $25.000 | 12 · $25.000 |
 
 Total = comisión base del mes (sobre la proyección) + extra bono semanal (suma de las
 cuatro semanas, cada una en su propio piso). El bono semanal arranca en agosto de 2026.
+
+El tipo del roster **sigue haciendo falta**: es lo que decide el esquema de los meses
+anteriores a `$MES_UNIFICADO`. No hay que borrarlo.
 
 ---
 
