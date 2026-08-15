@@ -210,7 +210,26 @@ textarea{
 textarea:focus{border-color:var(--marca);box-shadow:0 0 0 3px rgba(44,44,224,.12)}
 .acc{display:flex;gap:9px;margin-top:11px;flex-wrap:wrap}
 
-.mmeta{display:grid;grid-template-columns:1fr auto auto;gap:9px;align-items:end}
+.mmeta{display:grid;grid-template-columns:1fr 150px 150px auto;gap:11px;align-items:end}
+.mmeta .campo{margin-bottom:0}
+.tbl input{
+  width:100%;padding:7px 9px;border:1.5px solid var(--linea);border-radius:8px;
+  background:#fff;color:var(--tx);outline:none;
+}
+.tbl input:focus{border-color:var(--marca);box-shadow:0 0 0 2.5px rgba(44,44,224,.12)}
+/* Layout inline, no flex: dentro de una celda de tabla que crece por los
+   inputs del modo edicion, flex desalineaba los botones entre si. */
+.acc-fila{text-align:right;white-space:nowrap;line-height:0}
+.acc-fila .btn + .btn{margin-left:6px}
+/* vertical-align:top, no middle: con middle, un boton solido y uno .sec en la
+   misma celda calculan distinta linea base y quedan escalonados 15px. */
+.btn.xs{
+  width:auto;height:30px;line-height:27px;padding:0 11px;font-size:12.5px;
+  border-radius:8px;box-shadow:none;white-space:nowrap;
+  border:1.5px solid transparent;display:inline-block;vertical-align:top;
+}
+.btn.xs.sec{border-color:var(--linea)}   /* .btn.xs pisa el borde de .sec */
+@media(max-width:760px){ .mmeta{grid-template-columns:1fr} }
 .modal{position:fixed;inset:0;background:rgba(14,15,25,.5);display:grid;place-items:center;z-index:90;padding:22px}
 .modal .cont{background:#fff;border-radius:16px;max-width:640px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 24px 60px rgba(0,0,0,.25)}
 .modal .cont>div{padding:20px 22px}
@@ -955,27 +974,52 @@ function montarLienzo(cv){
 /* ===================================================================== */
 /*  ASESOR · Mis metas                                                   */
 /* ===================================================================== */
+let editandoMeta = null;   // id de la meta que se está editando
+
+// Mes objetivo = mes en que se fijó + el plazo.
+function mesObjetivo(m){
+  if(!m.mes || !m.plazo_meses) return null;
+  const [y,mm] = m.mes.split('-').map(Number);
+  const d = new Date(y, mm - 1 + m.plazo_meses, 1);
+  const nombres = ['enero','febrero','marzo','abril','mayo','junio','julio',
+                   'agosto','septiembre','octubre','noviembre','diciembre'];
+  return `${nombres[d.getMonth()]} de ${d.getFullYear()}`;
+}
+
 function vMetas(v){
   v.appendChild(el('div','callout',
-    `<b>Estas metas son tuyas.</b> Escribe lo que quieres lograr con la comisión de este mes.
-     Tu supervisor no las ve: sirven para que tú midas para qué estás vendiendo.`));
+    `<b>Estas metas son tuyas.</b> Escribe lo que quieres lograr con tu comisión y en cuánto
+     tiempo. Tu supervisor no las ve: sirven para que tú midas para qué estás vendiendo.
+     Puedes agregar las que quieras, editarlas o borrarlas cuando cambien.`));
 
+  /* ------------------------------------------------------ agregar meta */
   const c = el('div','card p');
   const f = el('div','mmeta');
   const i1 = el('input'); i1.placeholder = 'Ej: cuota de la moto';
-  const i2 = el('input'); i2.placeholder = '$'; i2.inputMode = 'numeric'; i2.style.width = '130px';
+  const i2 = el('input'); i2.placeholder = '$'; i2.inputMode = 'numeric';
+  const i3 = el('input'); i3.placeholder = 'Ej: 3'; i3.inputMode = 'numeric'; i3.value = '1';
   const bt = el('button','btn mini','Agregar');
   f.appendChild(el('div','campo','<label>¿Qué quieres lograr?</label>')).appendChild(i1);
   f.appendChild(el('div','campo','<label>Cuánto</label>')).appendChild(i2);
+  f.appendChild(el('div','campo','<label>¿En cuántos meses?</label>')).appendChild(i3);
   f.appendChild(bt);
   c.appendChild(f);
+  const msg = el('div','nota',''); c.appendChild(msg);
   v.appendChild(c);
 
   bt.onclick = async () => {
-    const n = i1.value.trim(), val = parseInt(String(i2.value).replace(/\D/g,''),10);
-    if(!n) return;
+    const n = i1.value.trim();
+    const val = parseInt(String(i2.value).replace(/\D/g,''),10);
+    const pl  = parseInt(String(i3.value).replace(/\D/g,''),10);
+    if(!n){ msg.textContent = 'Escribe qué quieres lograr.'; return; }
+    if(!pl || pl < 1){ msg.textContent = 'El plazo tiene que ser de al menos 1 mes.'; return; }
     bt.disabled = true;
-    await sb.from('metas').insert({ cc_asesor:S.cc, nombre:n, valor:val||null, mes:S.mes });
+    const { error } = await sb.from('metas').insert({
+      cc_asesor:S.cc, nombre:n, valor:val||null, mes:S.mes, plazo_meses:pl
+    });
+    bt.disabled = false;
+    if(error){ msg.innerHTML = `<span style="color:var(--mal)">No se pudo guardar: ${esc(error.message)}</span>`; return; }
+    i1.value = ''; i2.value = ''; i3.value = '1'; msg.textContent = '';
     await cargarServidor(); pintar();
   };
 
@@ -983,31 +1027,91 @@ function vMetas(v){
     v.appendChild(el('div','card p vacio','Todavía no has escrito ninguna meta.'));
     return;
   }
+
+  /* --------------------------------------------------------- mis metas */
   const t = el('table','tbl');
-  t.innerHTML = '<thead><tr><th>Meta</th><th class="n">Valor</th><th>Mes</th><th></th></tr></thead>';
+  t.innerHTML = `<thead><tr>
+      <th>Meta</th><th class="n">Valor</th><th class="n">Plazo</th>
+      <th>La quieres para</th><th class="n">Al mes</th><th></th>
+    </tr></thead>`;
   const tb = el('tbody');
+
   S.metas.forEach(m => {
     const tr = el('tr');
-    tr.innerHTML = `<td class="destaca">${esc(m.nombre)}</td>
-      <td class="n">${m.valor ? pes(m.valor) : '—'}</td>
-      <td style="color:var(--tx2)">${esc(m.mes||'')}</td><td></td>`;
-    const bx = el('button','btn mini sec','Quitar');
-    bx.onclick = async () => { await sb.from('metas').delete().eq('id', m.id); await cargarServidor(); pintar(); };
-    tr.lastElementChild.appendChild(bx);
+
+    if(editandoMeta === m.id){
+      /* ------------------------------------------------ modo edición */
+      const e1 = el('input'); e1.value = m.nombre;
+      const e2 = el('input'); e2.value = m.valor || ''; e2.inputMode = 'numeric';
+      const e3 = el('input'); e3.value = m.plazo_meses || 1; e3.inputMode = 'numeric';
+      [e1,e2,e3].forEach(i => tr.appendChild(el('td')).appendChild(i));
+      const hueco = el('td'); hueco.colSpan = 2; tr.appendChild(hueco);
+
+      const acc = el('div','acc-fila');
+      const bg = el('button','btn xs','Guardar');
+      const bc = el('button','btn xs sec','Cancelar');
+      bg.onclick = async () => {
+        const pl = parseInt(String(e3.value).replace(/\D/g,''),10);
+        if(!e1.value.trim() || !pl || pl < 1) return;
+        bg.disabled = true;
+        await sb.from('metas').update({
+          nombre: e1.value.trim(),
+          valor: parseInt(String(e2.value).replace(/\D/g,''),10) || null,
+          plazo_meses: pl
+        }).eq('id', m.id);
+        editandoMeta = null;
+        await cargarServidor(); pintar();
+      };
+      bc.onclick = () => { editandoMeta = null; pintar(); };
+      acc.appendChild(bg); acc.appendChild(bc);
+      tr.appendChild(el('td')).appendChild(acc);
+
+    }else{
+      /* ------------------------------------------------ modo lectura */
+      const pl  = m.plazo_meses || 1;
+      const alMes = m.valor ? Math.round(m.valor / pl) : null;
+      const obj = mesObjetivo(m);
+      tr.innerHTML = `
+        <td class="destaca">${esc(m.nombre)}</td>
+        <td class="n">${m.valor ? pes(m.valor) : '—'}</td>
+        <td class="n">${pl} ${pl === 1 ? 'mes' : 'meses'}</td>
+        <td style="color:var(--tx2)">${obj ? esc(obj) : '—'}</td>
+        <td class="n">${alMes ? pes(alMes) : '—'}</td>`;
+
+      const acc = el('div','acc-fila');
+      const be = el('button','btn xs sec','Editar');
+      const bx = el('button','btn xs sec','Borrar');
+      be.onclick = () => { editandoMeta = m.id; pintar(); };
+      bx.onclick = async () => {
+        bx.disabled = true; bx.textContent = '…';
+        await sb.from('metas').delete().eq('id', m.id);
+        await cargarServidor(); pintar();
+      };
+      acc.appendChild(be); acc.appendChild(bx);
+      tr.appendChild(el('td')).appendChild(acc);
+    }
     tb.appendChild(tr);
   });
+
   t.appendChild(tb);
   const e = el('div','card envolt'); e.appendChild(t);
   v.appendChild(e);
 
-  const suma = S.metas.reduce((s,m) => s + (m.valor||0), 0);
+  /* ------------------------------------------------------- ¿te alcanza? */
   const mAct = S.agente.m[S.mes];
-  if(suma && mAct){
-    const falta = suma - mAct.total;
+  const porMes = S.metas.reduce((s,m) => s + (m.valor ? m.valor/(m.plazo_meses||1) : 0), 0);
+  if(porMes && mAct){
+    const com = mAct.total;
+    const falta = porMes - com;
     v.appendChild(el('div','nota', falta <= 0
-      ? `Tus metas suman ${pes(suma)} y tu comisión proyectada de ${esc(D.meses[S.mes].nombre)} es ${pes(mAct.total)}. <b>Te alcanza.</b>`
-      : `Tus metas suman ${pes(suma)} y tu comisión proyectada es ${pes(mAct.total)}: te faltarían <b>${pes(falta)}</b>.`));
+      ? `Entre todas tus metas necesitas juntar <b>${pes(porMes)} al mes</b> y tu comisión
+         proyectada de ${esc(D.meses[S.mes].nombre)} es ${pes(com)}. <b>Te alcanza.</b>`
+      : `Entre todas tus metas necesitas juntar <b>${pes(porMes)} al mes</b>. Tu comisión
+         proyectada de ${esc(D.meses[S.mes].nombre)} es ${pes(com)}: te faltarían
+         <b>${pes(falta)}</b> al mes. Puedes subir las ventas o darte más plazo.`));
   }
+  v.appendChild(el('div','nota',
+    'La columna «al mes» es el valor dividido entre el plazo: lo que tendrías que juntar cada mes para lograrla.'));
 }
 
 /* ===================================================================== */

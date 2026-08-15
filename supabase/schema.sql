@@ -146,14 +146,19 @@ create policy notas_supervisor on public.notas
 -- =========================================================== 8. metas
 -- Metas personales del asesor. Privadas: el supervisor NO las ve.
 create table if not exists public.metas (
-  id         uuid primary key default gen_random_uuid(),
-  cc_asesor  text not null,
-  nombre     text not null,
-  valor      bigint,
-  mes        text,
-  creado_en  timestamptz not null default now()
+  id           uuid primary key default gen_random_uuid(),
+  cc_asesor    text not null,
+  nombre       text not null,
+  valor        bigint,
+  mes          text,           -- mes en que se fijó la meta (yyyy-MM)
+  plazo_meses  int,            -- en cuántos meses quiere lograrla
+  creado_en    timestamptz not null default now()
 );
 create index if not exists metas_asesor_idx on public.metas (cc_asesor);
+
+-- Para bases creadas antes de que existiera el plazo: 'if not exists' en la
+-- tabla no agrega columnas nuevas a una tabla que ya estaba.
+alter table public.metas add column if not exists plazo_meses int;
 
 alter table public.metas enable row level security;
 
