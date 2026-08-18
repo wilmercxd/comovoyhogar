@@ -59,18 +59,38 @@ create policy usuarios_lee on public.usuarios
 
 -- ======================================================== 5. feedback
 -- Retroalimentación que el supervisor registra y el asesor firma.
+--
+-- 'tipo' distingue dos formas de la misma tabla (misma firma, mismo RLS):
+--   'generico'  -> título + cuerpo + compromisos en texto libre (el modal
+--                  "Registrar retroalimentación" del portal solo crea este tipo)
+--   'monitoreo' -> monitoreo de calidad estructurado; el desglose por criterio,
+--                  la nota, los datos de la llamada y la recomendación van en
+--                  'datos' (jsonb). 'cuerpo' se deja vacío en este caso.
 create table if not exists public.feedback (
   id                uuid primary key default gen_random_uuid(),
   cc_asesor         text not null,
   cc_supervisor     text not null,
   nombre_supervisor text,
+  tipo              text not null default 'generico' check (tipo in ('generico','monitoreo')),
   titulo            text not null,
   periodo           text,
-  cuerpo            text not null,
+  cuerpo            text,
   compromisos       text,
+  datos             jsonb,
   creado_en         timestamptz not null default now()
 );
 create index if not exists feedback_asesor_idx on public.feedback (cc_asesor, creado_en desc);
+
+-- Columnas para bases creadas antes de que existiera el monitoreo estructurado.
+alter table public.feedback add column if not exists tipo  text not null default 'generico';
+alter table public.feedback add column if not exists datos jsonb;
+alter table public.feedback alter column cuerpo drop not null;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'feedback_tipo_check') then
+    alter table public.feedback add constraint feedback_tipo_check check (tipo in ('generico','monitoreo'));
+  end if;
+end $$;
 
 alter table public.feedback enable row level security;
 
