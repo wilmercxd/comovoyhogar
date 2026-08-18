@@ -210,6 +210,30 @@ main{max-width:1240px;margin:0 auto;padding:24px 22px 70px}
 .callout b{color:var(--tx)}
 .vacio{text-align:center;padding:34px 20px;color:var(--tx3);font-size:14px}
 
+/* ---------------------------------------------------- monitoreo (calidad) */
+.mon-top{display:flex;gap:16px;align-items:flex-start;padding:15px 18px;border-bottom:1px solid var(--linea);flex-wrap:wrap}
+.mon-nota{
+  flex:0 0 auto;text-align:center;min-width:76px;padding:8px 12px;border-radius:10px;
+  background:var(--fondo);border:1px solid var(--linea);
+}
+.mon-nota .n{font-size:26px;font-weight:800;line-height:1;letter-spacing:-.02em;color:var(--tx)}
+.mon-nota .max{font-size:10.5px;color:var(--tx3);margin-top:2px}
+.mon-nota.ok .n{color:var(--ok)} .mon-nota.am .n{color:var(--am)} .mon-nota.mal .n{color:var(--mal)}
+.mon-tit{flex:1;min-width:220px}
+.mon-tit h4{font-size:15.5px;letter-spacing:.01em}
+.mon-tit .met{font-size:12.5px;color:var(--tx3);margin-top:3px}
+.mon-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 18px;
+  padding:14px 18px;border-bottom:1px solid var(--linea);background:#FAFAFE;
+}
+.mon-grid .et{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);margin-bottom:3px}
+.mon-grid .v{font-size:13.5px;color:var(--tx)}
+.mon-crit td{vertical-align:top}
+.mon-crit .rf{color:var(--tx2);line-height:1.55;font-size:13px}
+.mon-sec{padding:15px 18px;border-bottom:1px solid var(--linea)}
+.mon-sec h5{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);margin-bottom:7px}
+.mon-sec p{font-size:13.8px;color:var(--tx2);line-height:1.6;margin:0;white-space:pre-wrap}
+
 /* firmas */
 .fb{margin-bottom:15px;overflow:hidden}
 .fb .cab{padding:15px 18px;border-bottom:1px solid var(--linea);display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
@@ -976,8 +1000,14 @@ function vFeedback(v){
   lista.forEach(f => v.appendChild(tarjetaFeedback(f, true)));
 }
 
+// Despacha a la tarjeta genérica (título/cuerpo/compromisos en texto libre) o
+// a la de monitoreo (criterios, nota y metadatos de la llamada), según 'tipo'.
+// Ambas comparten el bloque de firma vía construirZonaFirma().
 function tarjetaFeedback(f, firmable){
-  const fi = firmaDe(f.id);
+  return (f.tipo === 'monitoreo' && f.datos) ? tarjetaMonitoreo(f, firmable) : tarjetaGenerica(f, firmable);
+}
+
+function tarjetaGenerica(f, firmable){
   const c  = el('div','card fb');
 
   c.appendChild(el('div','cab',
@@ -985,7 +1015,7 @@ function tarjetaFeedback(f, firmable){
        <h4>${esc(f.titulo)}</h4>
        <div class="met">${esc(f.periodo||'')} · registrada el ${fechaHora(f.creado_en)} por ${esc(f.nombre_supervisor||'tu supervisor')}</div>
      </div>
-     <div class="der">${fi ? '<span class="tag g">Firmada</span>' : '<span class="tag a">Pendiente de firma</span>'}</div>`));
+     <div class="der">${firmaDe(f.id) ? '<span class="tag g">Firmada</span>' : '<span class="tag a">Pendiente de firma</span>'}</div>`));
 
   c.appendChild(el('div','cuerpo', esc(f.cuerpo)));
   if(f.compromisos){
@@ -996,6 +1026,84 @@ function tarjetaFeedback(f, firmable){
        </div>`));
   }
 
+  c.appendChild(construirZonaFirma(f, firmable));
+  return c;
+}
+
+// Colorea el marcador de cada criterio tal como vino (SI/NO/N/A/ALTA/MEDIA/BAJA
+// o una fracción X/Y): no se reescribe a un vocabulario distinto, solo se
+// clasifica en el semáforo verde/ámbar/rojo/gris ya usado en todo el portal.
+function colorMarcador(m){
+  const mu = String(m||'').toUpperCase();
+  if(mu === 'N/A') return 'n';
+  if(mu === 'SI' || mu === 'ALTA') return 'g';
+  if(mu === 'MEDIA') return 'a';
+  if(mu === 'NO' || mu === 'BAJA') return 'r';
+  const frac = mu.match(/^(\d+)\/(\d+)$/);
+  if(frac){
+    const ratio = +frac[1]/+frac[2];
+    return ratio >= .8 ? 'g' : ratio > 0 ? 'a' : 'r';
+  }
+  return 'n';
+}
+
+function tarjetaMonitoreo(f, firmable){
+  const d = f.datos;
+  const c = el('div','card fb');
+
+  const notaPct = d.notaMax ? d.nota/d.notaMax : 0;
+  const claseNota = notaPct >= .85 ? 'ok' : notaPct >= .70 ? 'am' : 'mal';
+
+  const top = el('div','mon-top');
+  top.appendChild(el('div',`mon-nota ${claseNota}`,
+    `<div class="n">${un1(d.nota)}</div><div class="max">/ ${d.notaMax} pts</div>`));
+  top.appendChild(el('div','mon-tit',
+    `<h4>${esc(d.tipificacion || 'Monitoreo de llamada')}</h4>
+     <div class="met">${fechaHora(d.fechaLlamada)}${d.grabacion ? ' · grabación ' + esc(d.grabacion) : ''}${d.telefono ? ' · tel ' + esc(d.telefono) : ''}</div>
+     <div class="met">Cliente: ${esc(d.cliente || 'no identificado en la base')}</div>`));
+  top.appendChild(el('div','der',
+    firmaDe(f.id) ? '<span class="tag g">Firmada</span>' : '<span class="tag a">Pendiente de firma</span>'));
+  c.appendChild(top);
+
+  const grid = el('div','mon-grid');
+  const campo = (et,v2) => `<div><div class="et">${esc(et)}</div><div class="v">${esc(v2||'—')}</div></div>`;
+  grid.innerHTML =
+    campo('Fecha de la llamada', fechaHora(d.fechaLlamada)) +
+    campo('Cliente', d.cliente || 'No identificado') +
+    campo('Cédula del cliente', d.cedulaCliente) +
+    campo('Teléfono', d.telefono) +
+    campo('Duración', d.duracion) +
+    campo('Grabación', d.grabacion) +
+    campo('Tipificación', d.tipificacion);
+  c.appendChild(grid);
+
+  const t = el('table','tbl mon-crit');
+  t.innerHTML = `<thead><tr><th>Criterio</th><th class="n">Evaluación</th><th class="n">Peso</th><th>Retroalimentación</th></tr></thead>`;
+  const tb = el('tbody');
+  (d.criterios||[]).forEach(cr => {
+    const tr = el('tr');
+    tr.innerHTML = `
+      <td class="destaca">${esc(cr.nombre)}</td>
+      <td class="n"><span class="tag ${colorMarcador(cr.marcador)}">${esc(cr.marcador)}</span></td>
+      <td class="n" style="color:var(--tx3)">${esc(cr.peso)}</td>
+      <td class="rf">${esc(cr.texto)}</td>`;
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  const env = el('div','envolt'); env.appendChild(t);
+  c.appendChild(env);
+
+  if(d.resumen) c.appendChild(el('div','mon-sec', `<h5>Resumen de la llamada</h5><p>${esc(d.resumen)}</p>`));
+  if(d.recomendacion) c.appendChild(el('div','mon-sec', `<h5>Recomendaciones</h5><p>${esc(d.recomendacion)}</p>`));
+
+  c.appendChild(construirZonaFirma(f, firmable));
+  return c;
+}
+
+// Compartido por tarjetaGenerica y tarjetaMonitoreo: el trazo ya firmado, o el
+// lienzo para firmar si todavía no hay firma.
+function construirZonaFirma(f, firmable){
+  const fi = firmaDe(f.id);
   const zona = el('div','firma');
   if(fi){
     zona.appendChild(el('div','firmada',
@@ -1045,8 +1153,7 @@ function tarjetaFeedback(f, firmable){
       await cargarServidor(); pintarTabs(); pintar();
     };
   }
-  c.appendChild(zona);
-  return c;
+  return zona;
 }
 
 function montarLienzo(cv){
@@ -1418,8 +1525,9 @@ function vFirmas(v){
     s.appendChild(el('h3',null,`Sin firmar (${pend.length})`));
     pend.forEach(f => {
       const c = tarjetaFeedback(f, false);
-      c.querySelector('.cab h4').insertAdjacentHTML('afterend',
-        `<div style="font-size:13px;color:var(--marca);font-weight:650">${esc(nombreDe(f.cc_asesor))}</div>`);
+      // afterbegin, no '.cab h4': la tarjeta de monitoreo no tiene esa clase.
+      c.insertAdjacentHTML('afterbegin',
+        `<div style="padding:12px 18px 0;font-size:13px;color:var(--marca);font-weight:650">${esc(nombreDe(f.cc_asesor))}</div>`);
       s.appendChild(c);
     });
     v.appendChild(s);
@@ -1429,8 +1537,9 @@ function vFirmas(v){
     s.appendChild(el('h3',null,`Firmadas (${fir.length})`));
     fir.forEach(f => {
       const c = tarjetaFeedback(f, false);
-      c.querySelector('.cab h4').insertAdjacentHTML('afterend',
-        `<div style="font-size:13px;color:var(--marca);font-weight:650">${esc(nombreDe(f.cc_asesor))}</div>`);
+      // afterbegin, no '.cab h4': la tarjeta de monitoreo no tiene esa clase.
+      c.insertAdjacentHTML('afterbegin',
+        `<div style="padding:12px 18px 0;font-size:13px;color:var(--marca);font-weight:650">${esc(nombreDe(f.cc_asesor))}</div>`);
       s.appendChild(c);
     });
     v.appendChild(s);

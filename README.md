@@ -110,19 +110,39 @@ Proyecto: `mrmtprhaoilwzwghzdqn`
 
 Ambos son idempotentes. No hay que tocar nada en el dashboard.
 
-### Cargar monitoreos de calidad como retroalimentación
+### Monitoreo de calidad estructurado
 
-`supabase/cargar_monitoreos_agosto.sql` inserta monitoreos de llamada (de
-`Cruce_Manifiesto_Agentes.xlsx`) directamente en `public.feedback`, uno por llamada, con
-el desglose de los 7 criterios en el cuerpo y el criterio más bajo como compromiso
-sugerido. Aparecen para el asesor en "Retroalimentación", a la espera de su firma, igual
-que cualquier retroalimentación registrada desde el portal.
+`public.feedback` tiene una columna `tipo` (`generico` | `monitoreo`) y una `datos`
+jsonb. El modal "Registrar retroalimentación" del portal solo crea `generico` (título +
+cuerpo + compromisos, como siempre). El monitoreo de calidad es `datos` con esta forma:
 
-Es idempotente: cada INSERT trae un `where not exists` contra la referencia del
-monitoreo (`Ref. monitoreo: ...`) embebida en el cuerpo, así que correrlo dos veces no
-duplica nada. Para un corte nuevo de monitoreos, regenerar este archivo con el mismo
-procedimiento (parsear el Excel, armar cuerpo/compromisos, volcar a SQL con
-dollar-quoting) y volver a ejecutarlo.
+```
+{ nota, notaMax, fechaLlamada, cliente, cedulaCliente, telefono, grabacion,
+  tipificacion, duracion, criterios:[{nombre, peso, marcador, texto}], resumen,
+  recomendacion }
+```
+
+`tarjetaFeedback()` despacha según `tipo`: la de monitoreo muestra la nota grande,
+la cuadrícula de datos de la llamada, la tabla de criterios (evaluación coloreada
+verde/ámbar/rojo/gris según el marcador — SI/NO/N/A/ALTA/MEDIA/BAJA o una fracción
+X/Y, sin reescribirlo a otro vocabulario) y el resumen/recomendaciones. Ambas
+tarjetas comparten el mismo bloque de firma (`construirZonaFirma()`).
+
+`cliente`/`cedulaCliente` quedan en `null` porque el Excel de monitoreos no trae esos
+datos del cliente; el portal cae al texto "no identificado en la base" en ese caso.
+
+`supabase/cargar_monitoreos_agosto.sql` carga los monitoreos de
+`Cruce_Manifiesto_Agentes.xlsx` como filas `tipo='monitoreo'`. Es idempotente: cada
+INSERT trae un `where not exists` contra `datos->>'grabacion'`, así que correrlo dos
+veces no duplica nada. Para un corte nuevo, regenerar este archivo con el mismo
+procedimiento (parsear el Excel con Excel COM vía PowerShell, armar el jsonb por fila,
+volcar a SQL con dollar-quoting) y volver a ejecutarlo.
+
+**Si ya habías cargado monitoreos con la versión anterior** (texto plano en `cuerpo`,
+`tipo='generico'`): ejecutar primero `supabase/migrar_monitoreos_viejos.sql` — borra esas
+filas para que `cargar_monitoreos_agosto.sql` no las duplique. Se detiene solo con un
+error si alguna ya tiene firma (borrar el feedback borraría esa firma en cascada); en ese
+caso, resolver a mano antes de continuar.
 
 ### Cómo entra la gente
 
