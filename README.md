@@ -138,6 +138,12 @@ veces no duplica nada. Para un corte nuevo, regenerar este archivo con el mismo
 procedimiento (parsear el Excel con Excel COM vía PowerShell, armar el jsonb por fila,
 volcar a SQL con dollar-quoting) y volver a ejecutarlo.
 
+**Si ya habías cargado monitoreos con la versión anterior** (texto plano en `cuerpo`,
+`tipo='generico'`): ejecutar primero `supabase/migrar_monitoreos_viejos.sql` — borra esas
+filas para que `cargar_monitoreos_agosto.sql` no las duplique. Se detiene solo con un
+error si alguna ya tiene firma (borrar el feedback borraría esa firma en cascada); en ese
+caso, resolver a mano antes de continuar.
+
 ### Cómo entra la gente
 
 Tres campos: **cédula, contraseña y segundo apellido**.
