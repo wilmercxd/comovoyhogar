@@ -75,6 +75,11 @@ function Dias-Habiles([datetime]$ini,[datetime]$fin){
   while ($d -le $fin) { if (Es-Habil $d) { $n++ }; $d = $d.AddDays(1) }
   return $n
 }
+function Dia-HabilAnterior([datetime]$d){
+  $p = $d.AddDays(-1)
+  while (-not (Es-Habil $p)) { $p = $p.AddDays(-1) }
+  return $p
+}
 
 # ---------------------------------------------------------- esquema de pago
 # Tomado de COMISIONES AGOSTO.pdf. escalones = [ventas_desde, valor_por_venta]
@@ -368,6 +373,54 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
       $semJson += [ordered]@{ n=$s.n; inst=$n; piso=$p.piso; tarifa=$p.tarifa; com=$p.com }
     }
 
+    # -------- racha de ventas y Personal Best (dias completos, sin el dia del
+    # corte: los estados de instalacion llegan con un dia de rezago y contarlo
+    # rompería rachas que en realidad siguen vivas)
+    $diaCompleto = if ($info.cerrado) { $info.ultimo } else { Dia-HabilAnterior $fCorte }
+    $diasMes = @()
+    if ($diaCompleto -ge $info.primero) {
+      $d = $info.primero
+      while ($d -le $diaCompleto) {
+        if (Es-Habil $d) {
+          $n = @($inst | Where-Object { $_.agenda.Date -eq $d.Date }).Count
+          $diasMes += ,[pscustomobject]@{ f=$d; n=$n }
+        }
+        $d = $d.AddDays(1)
+      }
+    }
+
+    # Racha = dias consecutivos con al menos 1 instalada, contando hacia atras
+    # desde el ultimo dia completo. El comodin perdona UN dia flojo sin cortar
+    # la racha (pero ese dia no suma), y solo se puede usar una vez por mes.
+    $rachaActual = 0; $saltos = 0
+    for ($i = $diasMes.Count-1; $i -ge 0; $i--) {
+      if ($diasMes[$i].n -gt 0) { $rachaActual++ }
+      elseif ($saltos -lt 1) { $saltos++ }
+      else { break }
+    }
+    $mejorRacha = 0
+    for ($ini2 = $diasMes.Count-1; $ini2 -ge 0; $ini2--) {
+      $r = 0; $s = 0
+      for ($i = $ini2; $i -ge 0; $i--) {
+        if ($diasMes[$i].n -gt 0) { $r++ }
+        elseif ($s -lt 1) { $s++ }
+        else { break }
+      }
+      if ($r -gt $mejorRacha) { $mejorRacha = $r }
+    }
+
+    $pb = $null
+    if ($diasMes.Count -gt 0) {
+      $record    = ($diasMes | Measure-Object n -Maximum).Maximum
+      $recordDia = ($diasMes | Where-Object { $_.n -eq $record } | Select-Object -First 1)
+      $ayerDia   = $diasMes[-1]
+      $pb = [ordered]@{
+        ayer = $ayerDia.n; ayerFecha = $ayerDia.f.ToString('yyyy-MM-dd')
+        record = $record;  recordFecha = $recordDia.f.ToString('yyyy-MM-dd')
+        iguala = ($ayerDia.n -ge $record)
+      }
+    }
+
     # -------- estados y pendientes por revisar
     $estados = @($delMes | Group-Object estado | Sort-Object Count -Descending |
                  ForEach-Object { ,@($_.Name, $_.Count) })
@@ -431,6 +484,12 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
       comHoy = $pMes.com
       extra  = $extra
       total  = [math]::Round($proy * $pProy.tarifa) + $extra
+      # Comisión ya asegurada con lo REALMENTE instalado (no la proyección):
+      # base sobre instaladas reales + el extra bono, que ya se calcula sobre
+      # instaladas reales de cada semana. Nunca es mayor que 'total'.
+      garantizada = $pMes.com + $extra
+      racha  = [ordered]@{ actual=$rachaActual; mejor=$mejorRacha; comodinUsado=($saltos -gt 0) }
+      pb     = $pb
       ritmo  = $ritmo
       req    = $req
       esf    = $esf

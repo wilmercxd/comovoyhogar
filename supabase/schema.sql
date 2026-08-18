@@ -168,8 +168,41 @@ create policy metas_propias on public.metas
   using (cc_asesor = public.mi_cc())
   with check (cc_asesor = public.mi_cc());
 
+-- ================================================== 9. reconocimientos
+-- Reconocimientos cortos que el supervisor otorga a un asesor (mejor racha,
+-- superación, meta cumplida...). El asesor los ve; alimentan el nudge de
+-- login y la vitrina de "tus reconocimientos" en su vista.
+create table if not exists public.reconocimientos (
+  id                uuid primary key default gen_random_uuid(),
+  cc_asesor         text not null,
+  cc_supervisor     text not null,
+  nombre_supervisor text,
+  texto             text not null,
+  emoji             text not null default '🏆',
+  mes               text,           -- yyyy-MM al que aplica, para contarlo por mes
+  creado_en         timestamptz not null default now()
+);
+create index if not exists reconocimientos_asesor_idx on public.reconocimientos (cc_asesor, creado_en desc);
+
+alter table public.reconocimientos enable row level security;
+
+drop policy if exists reconocimientos_lee on public.reconocimientos;
+create policy reconocimientos_lee on public.reconocimientos
+  for select to authenticated
+  using (cc_asesor = public.mi_cc() or public.es_supervisor());
+
+drop policy if exists reconocimientos_crea on public.reconocimientos;
+create policy reconocimientos_crea on public.reconocimientos
+  for insert to authenticated
+  with check (public.es_supervisor() and cc_supervisor = public.mi_cc());
+
+drop policy if exists reconocimientos_borra on public.reconocimientos;
+create policy reconocimientos_borra on public.reconocimientos
+  for delete to authenticated
+  using (public.es_supervisor() and cc_supervisor = public.mi_cc());
+
 -- ==========================================================================
---  9. Semilla del equipo
+--  10. Semilla del equipo
 --  Como 'usuarios' es de solo lectura desde el portal, este bloque es la
 --  única forma de dar de alta a alguien. Para un asesor nuevo: agregarlo
 --  aquí, volver a ejecutar este INSERT y sumarlo a roster.csv.
@@ -195,12 +228,12 @@ insert into public.usuarios (cc, nombre, rol) values
 on conflict (cc) do update set nombre = excluded.nombre, rol = excluded.rol;
 
 -- ==========================================================================
---  10. Verificación
---  Al terminar debe devolver 5 tablas y 3 funciones.
+--  11. Verificación
+--  Al terminar debe devolver 6 tablas y 3 funciones.
 -- ==========================================================================
 select 'tablas' as que, count(*) as n
   from pg_tables where schemaname = 'public'
-   and tablename in ('usuarios','feedback','firmas','notas','metas')
+   and tablename in ('usuarios','feedback','firmas','notas','metas','reconocimientos')
 union all
 select 'funciones', count(*)
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
