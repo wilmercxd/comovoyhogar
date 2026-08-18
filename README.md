@@ -110,6 +110,20 @@ Proyecto: `mrmtprhaoilwzwghzdqn`
 
 Ambos son idempotentes. No hay que tocar nada en el dashboard.
 
+### Cargar monitoreos de calidad como retroalimentación
+
+`supabase/cargar_monitoreos_agosto.sql` inserta monitoreos de llamada (de
+`Cruce_Manifiesto_Agentes.xlsx`) directamente en `public.feedback`, uno por llamada, con
+el desglose de los 7 criterios en el cuerpo y el criterio más bajo como compromiso
+sugerido. Aparecen para el asesor en "Retroalimentación", a la espera de su firma, igual
+que cualquier retroalimentación registrada desde el portal.
+
+Es idempotente: cada INSERT trae un `where not exists` contra la referencia del
+monitoreo (`Ref. monitoreo: ...`) embebida en el cuerpo, así que correrlo dos veces no
+duplica nada. Para un corte nuevo de monitoreos, regenerar este archivo con el mismo
+procedimiento (parsear el Excel, armar cuerpo/compromisos, volcar a SQL con
+dollar-quoting) y volver a ejecutarlo.
+
 ### Cómo entra la gente
 
 Tres campos: **cédula, contraseña y segundo apellido**.
@@ -135,6 +149,31 @@ ejecutarlo.
 Al final de `cuentas.sql` hay una consulta que lista, para cada persona, qué apellido
 tiene que escribir y si su cuenta quedó bien creada.
 
+### Capa de gamificación (agosto 2026)
+
+Todo esto vive en `ventas.json` salvo los reconocimientos (Supabase, tabla
+`reconocimientos`), y solo se muestra en el **mes en curso** — un mes cerrado no lo
+necesita, ya es un resultado fijo:
+
+- **Racha de ventas**: días hábiles consecutivos con al menos 1 instalada, contando
+  hacia atrás desde el último día completo (no desde el día del corte: por el rezago
+  de un día, contarlo rompería rachas que en realidad siguen vivas). Un comodín mensual
+  perdona un único día flojo sin cortar la racha.
+- **Gánale a tu ayer**: instaladas de ayer vs. tu mejor día del mes.
+- **Ligas** (Bronce/Plata/Oro/Platino/Diamante, por tramos de cumplimiento): capa de
+  juego sobre el `%` de siempre, no lo reemplaza. Se calculan en el cliente
+  (`ligaDe()`), no hay nada que generar.
+- **Comisión ganada vs. potencial**: `garantizada` = comisión sobre instaladas
+  **reales** (no la proyección) + el extra bono semanal, que ya se calcula sobre
+  instaladas reales de cada semana. `total - garantizada` es lo que todavía se puede
+  ganar. Nunca es negativo: `total` siempre incluye al menos lo garantizado.
+- **Efecto de arranque**: la barra de avance de un mes en curso nunca se ve en 0%
+  (mínimo visual 8%), para que transmita movimiento desde el primer día. Un mes
+  cerrado muestra el número real, sin piso artificial.
+- **Reconocimientos**: el supervisor los da desde "Mi equipo" → "Dar reconocimiento".
+  Aparecen en el nudge de login del asesor y en una vitrina en su vista, filtrados por
+  el mes al que aplican. También quedan en el consolidado de notas del supervisor.
+
 ### Sobre este modelo de acceso
 
 Los tres datos (cédula, cédula otra vez y apellido) circulan dentro del piso: quien los
@@ -148,6 +187,7 @@ el camino es un OTP al correo corporativo.
 | Tabla | Qué guarda | Quién la ve |
 |---|---|---|
 | `usuarios` | Cédula, nombre y rol | Cada quien el suyo; el supervisor, todos |
+| `reconocimientos` | Reconocimientos que da el supervisor | El asesor los suyos; el supervisor, todos |
 | `feedback` | Retroalimentación registrada por el supervisor | El asesor la suya; el supervisor, todas |
 | `firmas` | Trazo, observaciones, fecha e IP | Igual que `feedback` |
 | `notas` | Bitácora del supervisor | **Solo el supervisor** |

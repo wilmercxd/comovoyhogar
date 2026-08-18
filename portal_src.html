@@ -181,6 +181,28 @@ main{max-width:1240px;margin:0 auto;padding:24px 22px 70px}
 .cc{font-variant-numeric:tabular-nums;font-weight:650;letter-spacing:.01em}
 
 .nota{font-size:12.5px;color:var(--tx3);margin-top:9px;line-height:1.55}
+
+/* --------------------------------------------------------------- nudge */
+.nudge{
+  background:var(--grad);color:#fff;border-radius:var(--r);padding:16px 20px;
+  margin-bottom:20px;display:flex;align-items:center;gap:16px;box-shadow:var(--sombra);flex-wrap:wrap;
+}
+.nudge .liga{
+  display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.18);
+  border-radius:99px;padding:7px 14px;font-weight:700;font-size:13.5px;white-space:nowrap;flex:0 0 auto;
+}
+.nudge .msg{flex:1;min-width:220px;font-size:13.8px;line-height:1.5}
+.nudge .msg b{color:#fff}
+
+/* ------------------------------------------------------- gánale a tu ayer */
+.vsbox{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.vsbox .n{font-size:32px;font-weight:750;letter-spacing:-.03em;line-height:1.05;margin-top:2px}
+
+/* ---------------------------------------------------------- reconocimientos */
+.reconoc{
+  display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--linea);
+  border-radius:99px;padding:7px 13px;font-size:13px;margin:0 8px 8px 0;box-shadow:var(--sombra);
+}
 .callout{
   border-left:3px solid var(--marca2);background:#fff;border-radius:0 10px 10px 0;
   padding:13px 15px;font-size:13.5px;color:var(--tx2);margin-bottom:13px;box-shadow:var(--sombra);
@@ -387,8 +409,19 @@ const MESES = Object.keys(D.meses).sort();
 const S = {
   user:null, cc:null, rol:null, nombre:null,
   agente:null, mes:MESES[MESES.length-1], tab:'desempeno',
-  feedback:[], firmas:[], notas:[], metas:[]
+  feedback:[], firmas:[], notas:[], metas:[], reconocimientos:[]
 };
+
+/* Ligas: capa de juego sobre el cumplimiento (proyección/meta). No son el
+   semáforo operativo (ese sigue igual); son el marco motivacional del nudge. */
+const LIGAS = [
+  {min:1.50, nombre:'Diamante', emoji:'💎'},
+  {min:1.10, nombre:'Platino',  emoji:'💠'},
+  {min:.85,  nombre:'Oro',      emoji:'🥇'},
+  {min:.70,  nombre:'Plata',    emoji:'🥈'},
+  {min:0,    nombre:'Bronce',   emoji:'🥉'}
+];
+function ligaDe(cumpl){ return LIGAS.find(l => cumpl >= l.min); }
 
 /* ===================================================================== */
 /*  Login                                                                */
@@ -471,20 +504,24 @@ async function entrar(){
 /* ===================================================================== */
 async function cargarServidor(){
   // Sin filtro por cédula: RLS acota. El supervisor no tiene firmas propias.
-  const [fb, fi, no, me] = await Promise.all([
+  const [fb, fi, no, me, re] = await Promise.all([
     sb.from('feedback').select('*').order('creado_en',{ascending:false}),
     sb.from('firmas').select('*'),
     sb.from('notas').select('*').order('creado_en',{ascending:false}),
-    sb.from('metas').select('*').eq('cc_asesor', S.cc)
+    sb.from('metas').select('*').eq('cc_asesor', S.cc),
+    sb.from('reconocimientos').select('*').order('creado_en',{ascending:false})
   ]);
   S.feedback = fb.data || []; S.firmas = fi.data || [];
   S.notas    = no.data || []; S.metas   = me.data || [];
+  S.reconocimientos = re.data || [];
   if(fb.error) console.warn('feedback:', fb.error.message);
   if(fi.error) console.warn('firmas:', fi.error.message);
+  if(re.error) console.warn('reconocimientos:', re.error.message);
 }
 const firmaDe = id => S.firmas.find(f => f.feedback_id === id);
 const misFeedback = () => S.feedback.filter(f => f.cc_asesor === S.cc);
 const pendientesFirma = () => misFeedback().filter(f => !firmaDe(f.id)).length;
+const misReconocimientos = () => S.reconocimientos.filter(r => r.cc_asesor === S.cc);
 
 /* ===================================================================== */
 /*  Navegación                                                           */
@@ -544,6 +581,19 @@ function vDesempeno(v){
   const prev = MESES[MESES.indexOf(mk)-1];
   const ant  = prev ? a.m[prev] : null;
 
+  if(!mes.cerrado) v.appendChild(nudgeBanner(m, mk));
+
+  const misRecon = misReconocimientos().filter(r => r.mes === mk);
+  if(misRecon.length){
+    const sR = el('section','sec');
+    sR.appendChild(el('h3',null,'Tus reconocimientos'));
+    const wrap = el('div');
+    misRecon.forEach(r => wrap.appendChild(el('span','reconoc',
+      `${esc(r.emoji||'🏆')} <b>${esc(r.texto)}</b>`)));
+    sR.appendChild(wrap);
+    v.appendChild(sR);
+  }
+
   /* ---------------------------------------------------- 1. indicadores */
   const s1 = el('section','sec');
   s1.appendChild(el('h3',null,'Mis indicadores'));
@@ -574,6 +624,12 @@ function vDesempeno(v){
     `${m.gest - m.inst} ${mes.cerrado ? 'no se instalaron' : 'sin instalar todavía'}`,
     ant ? gestProy - ant.gest : null, vs(ant?.gest)));
 
+  if(!mes.cerrado && m.racha){
+    const rachaSub = `Mejor racha del mes: ${m.racha.mejor} día${m.racha.mejor===1?'':'s'}` +
+      (m.racha.comodinUsado ? ' · ya usaste tu comodín' : ' · tienes 1 comodín disponible');
+    g.appendChild(kpi('Racha de ventas', `${m.racha.actual} día${m.racha.actual===1?'':'s'}`, rachaSub));
+  }
+
   s1.appendChild(g);
   v.appendChild(s1);
 
@@ -593,9 +649,13 @@ function vDesempeno(v){
        ${mes.cerrado ? 'Instaladas al cierre' : 'Proyección de instaladas'}</div>`));
   izq.appendChild(el('div','gr', `${un1(m.proy)} <span>de ${m.meta} de meta</span>`));
 
+  // Efecto de arranque: un mes en curso nunca se ve en 0%, para que la barra
+  // ya transmita avance desde el primer día. Un mes cerrado sí muestra el
+  // resultado real, sin piso artificial.
+  const anchoBarra = mes.cerrado ? avance*100 : Math.max(avance*100, 8);
   const b = el('div','barra');
   b.appendChild(el('i',null,'')).style.cssText =
-    `width:${(avance*100).toFixed(1)}%;background:${colorSem(m.cumpl)}`;
+    `width:${anchoBarra.toFixed(1)}%;background:${colorSem(m.cumpl)}`;
   izq.appendChild(b);
 
   izq.appendChild(el('div',null,
@@ -632,6 +692,18 @@ function vDesempeno(v){
       `<div style="font-size:13px;color:var(--tx2)">Comisión base del mes. En ${esc(D.meses[MESES[MESES.length-1]].corto)} se suma además el extra bono semanal.</div>`));
   }
 
+  if(!mes.cerrado){
+    // Marco positivo: lo ya asegurado con instaladas REALES (no la proyección)
+    // más el extra bono, que ya se calcula sobre instaladas reales de cada
+    // semana. 'total' siempre es mayor o igual, así que potencial nunca es negativo.
+    const potencial = m.total - m.garantizada;
+    der.appendChild(el('div','pt',
+      `Ya tienes asegurados <b>${pes(m.garantizada)}</b> con lo que llevas instalado.` +
+      (potencial > 0
+        ? ` Si sigues a este ritmo, todavía tienes <b>${pes(potencial)}</b> más por ganar este mes.`
+        : ' Ya estás en el tope de esta proyección.')));
+  }
+
   const e = el('div','esc');
   esq.mes.forEach(([desde,val],i) => {
     const on = m.piso === i+1;
@@ -663,6 +735,27 @@ function vDesempeno(v){
       `Nota: el consolidado oficial de ${esc(mes.corto)} te reportó <b>${m.oficial}</b> instaladas. Aquí ves <b>${m.inst}</b> porque se cuentan las ventas de la sábana con fecha de agenda dentro del mes. Si la diferencia te afecta, revísala con tu supervisor.`));
   }
   v.appendChild(s2);
+
+  /* --------------------------------------------------- 2b. Personal Best */
+  if(!mes.cerrado && m.pb){
+    const s2b = el('section','sec');
+    s2b.appendChild(el('h3',null,'Gánale a tu ayer'));
+    const cpb = el('div','card p');
+    cpb.appendChild(el('div','vsbox',
+      `<div><div class="et" style="font-size:11.5px;font-weight:650;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em">
+          Ayer · ${esc(fechaCorta(m.pb.ayerFecha))}</div>
+        <div class="n">${m.pb.ayer}</div></div>
+       <div style="font-size:20px;color:var(--tx3)">vs</div>
+       <div><div class="et" style="font-size:11.5px;font-weight:650;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em">
+          Tu mejor día · ${esc(fechaCorta(m.pb.recordFecha))}</div>
+        <div class="n">${m.pb.record}</div></div>`));
+    const faltan = m.pb.record - m.pb.ayer;
+    cpb.appendChild(el('div','nota', m.pb.iguala
+      ? `<b>¡Igualaste o superaste tu mejor día del mes!</b> Si hoy repites, tienes un nuevo récord.`
+      : `Te faltaron <b>${faltan} venta${faltan===1?'':'s'}</b> ayer para igualar tu mejor día. Hoy es una nueva oportunidad de superarlo.`));
+    s2b.appendChild(cpb);
+    v.appendChild(s2b);
+  }
 
   /* ------------------------------------------------------ 3. semanas */
   const s3 = el('section','sec');
@@ -808,6 +901,22 @@ function kpi(et, val, sub, delta, refe, esPuntos){
       `<div style="margin-top:7px"><span class="delta ${cl}">${fl} ${t}</span>
        <span style="font-size:12px;color:var(--tx3);margin-left:5px">${esc(refe)}</span></div>`));
   }
+  return c;
+}
+
+function nudgeBanner(m, mk){
+  const liga = ligaDe(m.cumpl);
+  const reconMes = misReconocimientos().filter(r => r.mes === mk).length;
+  let frase;
+  if(m.cumpl >= 1.10) frase = 'Vas muy por encima de tu meta. Sostené el ritmo, así se cierra fuerte.';
+  else if(m.cumpl >= .85) frase = 'Vas sólido, dentro de tu meta. Un empujón más y subís de liga.';
+  else if(m.cumpl >= .70) frase = 'Ajustado pero a tiempo: con un par de ventas más te acomodás.';
+  else frase = 'Arrancando: cada venta de hoy suma directo a tu proyección.';
+  const c = el('div','nudge');
+  c.innerHTML = `
+    <div class="liga">${liga.emoji}<span>Liga ${esc(liga.nombre)}</span></div>
+    <div class="msg">${esc(frase)}${reconMes
+      ? ` · Este mes tienes <b>${reconMes}</b> reconocimiento${reconMes===1?'':'s'} de tu supervisor.` : ''}</div>`;
   return c;
 }
 
@@ -1153,6 +1262,8 @@ function vEquipo(v){
   g.appendChild(kpi('Agendadas por instalar', un1(tot.agendadas),
     mes.cerrado ? 'Quedaron sin instalar' : 'Todavía pueden entrar este mes'));
   g.appendChild(kpi('Ventas por revisar', un1(tot.pend), 'No instaladas en el mes'));
+  const reconMes = S.reconocimientos.filter(r => r.mes === mk).length;
+  g.appendChild(kpi('Reconocimientos dados', String(reconMes), `En ${esc(mes.corto)}`));
   s0.appendChild(g);
   v.appendChild(s0);
 
@@ -1207,7 +1318,9 @@ function vEquipo(v){
   bx.onclick = () => exportarCSV(filas, cols, `equipo_${mk}`);
   const bn = el('button','btn mini','Registrar retroalimentación');
   bn.onclick = () => modalFeedback();
-  acc.appendChild(bn); acc.appendChild(bx);
+  const br = el('button','btn mini sec','Dar reconocimiento');
+  br.onclick = () => modalReconocimiento();
+  acc.appendChild(bn); acc.appendChild(br); acc.appendChild(bx);
   s1.appendChild(acc);
   v.appendChild(s1);
 
@@ -1369,11 +1482,15 @@ function vNotas(v){
   c.appendChild(bg); c.appendChild(msg);
   v.appendChild(c);
 
-  /* ------------------------- consolidado: notas + observaciones de firma */
+  /* --------------- consolidado: notas + reconocimientos + observaciones */
   const items = [
     ...S.notas.map(n => ({
       tipo:'Nota', fecha:n.creado_en, quien:n.cc_asesor ? nombreDe(n.cc_asesor) : 'Todo el equipo',
-      asunto:n.asunto, cuerpo:n.cuerpo, id:n.id, borrable:true
+      asunto:n.asunto, cuerpo:n.cuerpo, id:n.id, tabla:'notas', borrable:true
+    })),
+    ...S.reconocimientos.map(r => ({
+      tipo:'Reconocimiento', fecha:r.creado_en, quien:nombreDe(r.cc_asesor),
+      asunto:`${r.emoji||'🏆'} ${r.mes||''}`, cuerpo:r.texto, id:r.id, tabla:'reconocimientos', borrable:true
     })),
     ...S.firmas.filter(f => f.observaciones).map(f => {
       const fb = S.feedback.find(x => x.id === f.feedback_id);
@@ -1394,9 +1511,10 @@ function vNotas(v){
   }
   items.forEach(it => {
     const card = el('div','card'); card.style.marginBottom = '11px';
+    const tagCl = it.tipo==='Nota' ? 'n' : it.tipo==='Reconocimiento' ? 'a' : 'g';
     const cab = el('div',null,
       `<div style="padding:13px 16px 0;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
-         <span class="tag ${it.tipo==='Nota'?'n':'g'}">${esc(it.tipo)}</span>
+         <span class="tag ${tagCl}">${esc(it.tipo)}</span>
          <b style="font-size:14.5px">${esc(it.asunto)}</b>
          <span style="font-size:12.5px;color:var(--marca);font-weight:650">${esc(it.quien)}</span>
          <span style="font-size:12px;color:var(--tx3);margin-left:auto">${fechaHora(it.fecha)}</span>
@@ -1407,7 +1525,7 @@ function vNotas(v){
     if(it.borrable){
       const b = el('button','btn mini sec','Eliminar');
       b.style.cssText += ';margin:0 16px 14px';
-      b.onclick = async () => { await sb.from('notas').delete().eq('id', it.id); await cargarServidor(); pintar(); };
+      b.onclick = async () => { await sb.from(it.tabla).delete().eq('id', it.id); await cargarServidor(); pintar(); };
       card.appendChild(b);
     }
     s.appendChild(card);
@@ -1475,6 +1593,62 @@ function modalFeedback(){
     }
     m.remove();
     await cargarServidor(); pintarTabs(); pintar();
+  };
+
+  cont.appendChild(cuerpo); m.appendChild(cont);
+  m.addEventListener('click', e => { if(e.target === m) m.remove(); });
+  $('#modales').appendChild(m);
+}
+
+/* ===================================================================== */
+/*  Modal: dar un reconocimiento                                         */
+/* ===================================================================== */
+const OPCIONES_EMOJI_RECON = [
+  ['🏆','Reconocimiento'], ['⭐','Destacado'], ['🔥','Racha'],
+  ['🚀','Superación'], ['💪','Esfuerzo'], ['🎯','Meta cumplida']
+];
+
+function modalReconocimiento(){
+  const m = el('div','modal');
+  const cont = el('div','cont'); const cuerpo = el('div');
+  cuerpo.appendChild(el('h3',null,'Dar un reconocimiento'));
+
+  const sel = el('select');
+  sel.style.cssText = 'width:100%;padding:11px 13px;border:1.5px solid var(--linea);border-radius:10px;background:#fff';
+  sel.innerHTML = D.agentes.map(a => `<option value="${esc(a.cc)}">${esc(a.nombre)}</option>`).join('');
+  const c1 = el('div','campo','<label>Asesor</label>'); c1.appendChild(sel); cuerpo.appendChild(c1);
+
+  const selE = el('select');
+  selE.style.cssText = sel.style.cssText;
+  selE.innerHTML = OPCIONES_EMOJI_RECON.map(([e2,t]) => `<option value="${e2}">${e2} ${esc(t)}</option>`).join('');
+  const c2 = el('div','campo','<label>Tipo</label>'); c2.appendChild(selE); cuerpo.appendChild(c2);
+
+  const tx = el('textarea');
+  tx.placeholder = 'Ej: mejor racha de ventas de la semana, felicitaciones.';
+  const c3 = el('div','campo','<label>Mensaje</label>'); c3.appendChild(tx); cuerpo.appendChild(c3);
+
+  const msg = el('div','nota','');
+  const acc = el('div','acc');
+  const bg = el('button','btn mini','Dar reconocimiento');
+  const bc = el('button','btn mini sec','Cancelar');
+  acc.appendChild(bg); acc.appendChild(bc);
+  cuerpo.appendChild(acc); cuerpo.appendChild(msg);
+
+  bc.onclick = () => m.remove();
+  bg.onclick = async () => {
+    if(!tx.value.trim()){ msg.textContent = 'Escribe el mensaje del reconocimiento.'; return; }
+    bg.disabled = true; bg.textContent = 'Guardando…';
+    const { error } = await sb.from('reconocimientos').insert({
+      cc_asesor:sel.value, cc_supervisor:S.cc, nombre_supervisor:S.nombre,
+      texto:tx.value.trim(), emoji:selE.value, mes:S.mes
+    });
+    if(error){
+      bg.disabled = false; bg.textContent = 'Dar reconocimiento';
+      msg.innerHTML = `<span style="color:var(--mal)">No se pudo guardar: ${esc(error.message)}</span>`;
+      return;
+    }
+    m.remove();
+    await cargarServidor(); pintar();
   };
 
   cont.appendChild(cuerpo); m.appendChild(cont);
