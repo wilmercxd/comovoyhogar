@@ -14,6 +14,11 @@ $ErrorActionPreference = 'Stop'
 if (-not $Raiz) { $Raiz = Split-Path -Parent $PSScriptRoot }
 $Salida = Join-Path $PSScriptRoot 'ventas.json'
 
+# Parseo temprano de -Corte: lo necesita Fecha-Archivo() para las sabanas cuyo
+# nombre no trae fecha (mas abajo, antes de que exista la variable $fCorte
+# "oficial" que se calcula en la seccion CORTE).
+$corteTemprano = if ($Corte) { [datetime]::ParseExact($Corte,'yyyy-MM-dd',$null) } else { $null }
+
 $errores = New-Object System.Collections.ArrayList
 $avisos  = New-Object System.Collections.ArrayList
 function Err($m){ [void]$errores.Add($m); Write-Host "  ERROR  $m" -ForegroundColor Red }
@@ -190,13 +195,22 @@ function Fecha-Archivo($archivo) {
   if ($archivo.Name -match '(\d{1,2})[_-](\d{1,2})[_-](\d{4})') {
     try { return [datetime]::new([int]$Matches[3], [int]$Matches[2], [int]$Matches[1]) } catch {}
   }
-  Avi "$($archivo.Name): el nombre no trae fecha, se ordena por fecha de archivo"
+  # Sabanas de nombre fijo (ej. SABANA HOGAR_AGOSTO_BRQ.csv) que se sobrescriben
+  # cada dia: su nombre no trae fecha, y la fecha de archivo de OneDrive no es
+  # confiable (puede reflejar cuando sincronizo, no cuando se genero el dato).
+  # El -Corte que se pasa a mano es la fecha real en la que confiar.
+  if ($corteTemprano) {
+    Avi "$($archivo.Name): el nombre no trae fecha, se usa el -Corte indicado ($($corteTemprano.ToString('yyyy-MM-dd'))) como fecha del archivo"
+    return $corteTemprano
+  }
+  Avi "$($archivo.Name): el nombre no trae fecha y no se paso -Corte, se ordena por fecha de archivo (menos confiable)"
   return $archivo.LastWriteTime
 }
 
-$ventas     = @{}
-$sinFecha   = 0
-$congeladas = 0
+$ventas       = @{}
+$sinFecha     = 0
+$congeladas   = 0
+$fueraCampana = 0
 
 foreach ($f in ($archivos | Sort-Object @{ Expression = { Fecha-Archivo $_ } })) {
   $fArchivo = Fecha-Archivo $f
@@ -216,7 +230,24 @@ foreach ($f in ($archivos | Sort-Object @{ Expression = { Fecha-Archivo $_ } }))
     if (-not $fa) { $sinFecha++; continue }
 
     $ot = "$(Get-Col $r $COLS.ot)".Trim()
-    $clave = if ($ot) { "OT$ot" } else { "X{0}|{1}|{2}" -f $cc, $fa.ToString('yyyyMMdd'), "$(Get-Col $r $COLS.cliCC)".Trim() }
+
+    # La cedula puede coincidir con la de un asesor nuestro por error de
+    # digitacion en una fila que en realidad es de otra campaña (visto: una
+    # OT de 'STAFF' con la cedula de un asesor de Hogar, pero otro nombre en
+    # la columna ASESOR). Se descarta por campaña, no por nombre: el nombre
+    # de la sabana trae variantes normales (apellidos truncados) que no son
+    # error, la campaña sí es una señal limpia.
+    $campana = "$(Get-Col $r $COLS.campana)".Trim().ToUpperInvariant()
+    if ($campana -and $campana -notmatch '^HOGAR') {
+      $fueraCampana++
+      Avi "fila descartada: CC $cc con campaña '$campana' (OT $ot) no es una campaña de Hogar"
+      continue
+    }
+
+    # '0' es el marcador de "sin OT asignado" en ventas rechazadas, no un OT
+    # real: tratarlo como tal colisiona docenas de rechazos de asesores y
+    # fechas distintas en una sola clave, y se pisan entre si.
+    $clave = if ($ot -and $ot -ne '0') { "OT$ot" } else { "X{0}|{1}|{2}" -f $cc, $fa.ToString('yyyyMMdd'), "$(Get-Col $r $COLS.cliCC)".Trim() }
 
     # Un mes ya cerrado no se vuelve a tocar: su cierre ya se comunico y se
     # pago. Si una OT de julio cambia de estado en la sabana de agosto, el
@@ -227,6 +258,12 @@ foreach ($f in ($archivos | Sort-Object @{ Expression = { Fecha-Archivo $_ } }))
     # agosto: no le resta nada a julio (alli no contaba) y tiene que sumar en
     # agosto. Congelarla por haber aparecido antes en la sabana de julio la
     # haria desaparecer de los dos meses.
+    #
+    # Esto tambien aplica si la venta YA estaba INSTALADO en un mes cerrado y
+    # pagado, y una sabana posterior le corrige la fecha agenda a otro mes
+    # (visto: OT 475747234 de Yeraldin, instalada, paso de 29/07 a 01/08).
+    # Confirmado con Wilmer el 19/08/2026 que ese tipo de correccion es real
+    # y debe mover la venta al mes nuevo, no quedarse pegada al mes viejo.
     if ($ventas.ContainsKey($clave)) {
       $finMes = $fa.AddDays(1 - $fa.Day).AddMonths(1).AddDays(-1)
       if ($ventas[$clave].arch -ge $finMes) { $congeladas++; continue }
@@ -257,8 +294,9 @@ foreach ($f in ($archivos | Sort-Object @{ Expression = { Fecha-Archivo $_ } }))
   Ok ("{0,-42} corte {1}  {2} filas del equipo" -f $f.Name, (Fecha-Archivo $f).ToString('yyyy-MM-dd'), $tomadas)
 }
 
-if ($sinFecha -gt 0)   { Avi "$sinFecha filas descartadas: FECHA AGENDA vacia o ilegible" }
-if ($congeladas -gt 0) { Ok  "$congeladas ventas de meses ya cerrados conservan el estado de su sabana de cierre" }
+if ($sinFecha -gt 0)     { Avi "$sinFecha filas descartadas: FECHA AGENDA vacia o ilegible" }
+if ($fueraCampana -gt 0) { Avi "$fueraCampana filas descartadas por campaña ajena a Hogar (ver avisos arriba)" }
+if ($congeladas -gt 0)   { Ok  "$congeladas ventas de meses ya cerrados conservan el estado de su sabana de cierre" }
 if ($ventas.Count -eq 0) { throw 'Ninguna venta del equipo quedo cargada' }
 Ok "$($ventas.Count) ventas unicas (deduplicadas por N°OT)"
 
