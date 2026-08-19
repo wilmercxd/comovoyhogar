@@ -50,6 +50,15 @@ Si omites `-Corte`, se toma la fecha de agenda más reciente con estado instalad
 
 Un mes cerrado no se proyecta: julio muestra su cierre definitivo.
 
+### Actualizar con doble clic
+
+`actualizar_portal.bat` corre todo el flujo de un clic: calcula la fecha de ayer (día
+vencido — el día de hoy siempre llega incompleto por el rezago de un día en los estados
+de instalación), y ejecuta `generar_datos.ps1 -Corte {ayer}` seguido de `construir.ps1`.
+Deja la ventana abierta al final para que se vea si algo falló antes de cerrarla.
+
+No reemplaza el paso de subir a GitHub — solo dejar `index.html` actualizado localmente.
+
 ### Cómo se combinan varias sábanas
 
 Las sábanas se acumulan en la carpeta: el generador las lee todas y deduplica por `N°OT`.
@@ -69,6 +78,33 @@ La condición de la regla 2 se evalúa sobre la **fecha de agenda nueva**. Una v
 quedó `NO INSTALADO` el 31/07 y se reagendó al 06/08 es una venta de agosto: en julio no
 contaba, así que no le resta nada, y tiene que sumar en agosto. Congelarla por haber
 aparecido antes en la sábana de julio la haría desaparecer de los dos meses.
+
+Esto también aplica si la venta **ya estaba `INSTALADO` en un mes cerrado y pagado**, y
+una sábana posterior le corrige la fecha agenda a otro mes: se mueve al mes nuevo igual
+que cualquier otra. No es un caso hipotético — pasó el 19/08/2026 con una venta de
+Yeraldin (OT `475747234`), confirmado con Wilmer como un ajuste real, no un glitch del
+reporte. Por eso julio puede mostrar una diferencia nueva contra el cierre oficial
+aunque nadie haya tocado nada: revisar con el supervisor antes de asumir que es un bug.
+
+### Sábanas de nombre fijo (sin fecha en el nombre)
+
+Algunos exportes usan un nombre fijo que se sobrescribe cada día (ej.
+`SABANA HOGAR_AGOSTO_BRQ.csv`), en vez de `SABANA HOGAR_dd_mm_aaaa`. Como el nombre no
+trae fecha, `Fecha-Archivo()` no puede leerla del nombre — usa el `-Corte` que se le pasó
+al generador como fecha del archivo (nunca `LastWriteTime`: en una carpeta de OneDrive
+esa fecha puede reflejar cuándo sincronizó, no cuándo se generó el dato).
+
+**Validar el alcance antes de cargar un archivo así.** Uno de estos exportes llegó una
+vez con 213 filas totales pero solo 12 de nuestro equipo (el resto era de otras
+sub-campañas), y sin ninguna instalada — se descartó a tiempo porque el generador no
+"falla" con datos incompletos, simplemente reporta menos. Comparar siempre el conteo de
+filas del equipo y las instaladas contra el corte anterior antes de generar.
+
+**Filtro por campaña:** una fila puede traer la cédula de un asesor nuestro por error de
+digitación pero pertenecer a otra campaña (visto: `CAMPAÑA=STAFF` con la cédula de un
+asesor de Hogar y otro nombre en la columna ASESOR). El generador descarta toda fila
+cuya `CAMPAÑA` no empiece por `HOGAR` y avisa cuál — no se filtra por nombre porque los
+nombres traen variantes normales (apellidos truncados) que no son error.
 
 ### Metas y comisión
 
@@ -299,6 +335,8 @@ rótala en Supabase → Settings → API Keys.
 | La hora de la firma va 5 horas adelantada | Postgres devuelve UTC sin marca de zona y el navegador la lee como local. Hay que agregar la `Z` y formatear con `timeZone` explícito |
 | Faltan ventas de los días recientes | El export mezcla fechas de texto con seriales de Excel (46246 = 12/08/2026). El parser acepta ambos |
 | Bajan las instaladas de un mes al meter una sábana nueva | Una sábana vieja está ganando la deduplicación. Verificar la línea `corte aaaa-mm-dd` que imprime el generador por archivo: tiene que ir en orden ascendente |
+| Baja el conteo de un mes ya cerrado | Puede ser un ajuste real (una venta instalada se reagendó de mes en el reporte, ver arriba) o una sábana mal filtrada. Revisar la OT específica en los archivos antes de asumir bug |
+| Ventas rechazadas que se pisan entre sí, o desaparecen del "por revisar" | `N°OT` viene como `0` (no `''`) para marcar "sin OT". El generador ya no lo trata como un OT real: si aun así se repite, revisar si apareció otro valor placeholder distinto de `0` |
 | El día del corte muestra muy pocas instaladas | Normal: los estados de instalación llegan con un día de rezago. El día del corte siempre sale subestimado y se completa al día siguiente |
 | Un asesor sale dos veces | Mojibake en los nombres. Se agrupa siempre por cédula, nunca por nombre |
 | KPIs en cero sin explicación | El nombre de una columna cambió entre exportes. Las columnas se resuelven ignorando espacios y mayúsculas |
