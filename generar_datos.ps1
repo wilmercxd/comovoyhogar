@@ -331,8 +331,15 @@ function Semanas-Mes([datetime]$primero){
   return $sem
 }
 
+$mkCorte = $fCorte.ToString('yyyy-MM')
+
+# Ventas agendadas mas alla del mes del corte (ej. un agendamiento para
+# septiembre mientras agosto todavia esta abierto) no abren una pestaña de
+# mes nueva: se cuentan dentro del mes en curso hasta que ese mes cierre.
+# Por eso el tope de $clavesMes es $mkCorte, no el mes mas futuro que
+# aparezca en la sabana.
 $clavesMes = @($todas | ForEach-Object { $_.agenda.ToString('yyyy-MM') } | Sort-Object -Unique)
-$clavesMes = @($clavesMes | Where-Object { $_ -ge '2026-07' })   # el portal muestra julio y agosto
+$clavesMes = @($clavesMes | Where-Object { $_ -ge '2026-07' -and $_ -le $mkCorte })   # el portal muestra julio y agosto
 
 $mesesJson = [ordered]@{}
 $mesesInfo = @{}
@@ -382,7 +389,17 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
   foreach ($mk in $clavesMes) {
     $info = $mesesInfo[$mk]
     $esq  = Esquema $mk $a.tipo
-    $delMes = @($mis | Where-Object { $_.agenda.ToString('yyyy-MM') -eq $mk })
+
+    # El mes en curso (el del corte) absorbe cualquier agenda mas futura
+    # (ej. una instalacion agendada para septiembre mientras agosto sigue
+    # abierto): todavia no existe una pestaña para ese mes, asi que cuenta
+    # aqui hasta que el mes en curso cierre. Los meses ya cerrados solo
+    # toman su propio mes exacto.
+    $delMes = if ($mk -eq $mkCorte) {
+      @($mis | Where-Object { $_.agenda.ToString('yyyy-MM') -ge $mk })
+    } else {
+      @($mis | Where-Object { $_.agenda.ToString('yyyy-MM') -eq $mk })
+    }
     if ($delMes.Count -eq 0) { continue }
 
     $inst = @($delMes | Where-Object { $_.estado -eq 'INSTALADO' })
