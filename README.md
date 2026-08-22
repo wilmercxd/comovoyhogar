@@ -79,6 +79,11 @@ quedó `NO INSTALADO` el 31/07 y se reagendó al 06/08 es una venta de agosto: e
 contaba, así que no le resta nada, y tiene que sumar en agosto. Congelarla por haber
 aparecido antes en la sábana de julio la haría desaparecer de los dos meses.
 
+**El mes en curso absorbe las agendas más futuras.** Si mientras agosto sigue abierto
+aparece una venta agendada para septiembre, no abre una pestaña de septiembre: cuenta
+dentro de agosto hasta que agosto cierre el 31. El tope de `$clavesMes` es siempre el mes
+del corte (`$mkCorte`), nunca el mes más futuro que traiga la sábana.
+
 Esto también aplica si la venta **ya estaba `INSTALADO` en un mes cerrado y pagado**, y
 una sábana posterior le corrige la fecha agenda a otro mes: se mueve al mes nuevo igual
 que cualquier otra. No es un caso hipotético — pasó el 19/08/2026 con una venta de
