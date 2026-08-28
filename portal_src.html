@@ -287,6 +287,14 @@ textarea:focus{border-color:var(--marca);box-shadow:0 0 0 3px rgba(44,44,224,.12
 .modal .cont>div{padding:20px 22px}
 .modal h3{font-size:18px;margin-bottom:14px}
 
+/* --------------------------------------------------------- avisos emergentes */
+.modal.aviso .cont{max-width:420px}
+.aviso-ico{
+  width:52px;height:52px;border-radius:14px;background:var(--grad);display:grid;place-items:center;
+  font-size:24px;margin-bottom:14px;box-shadow:var(--sombra);
+}
+.aviso-msg{font-size:14px;color:var(--tx2);line-height:1.6;margin-bottom:18px}
+
 @media(max-width:900px){
   #login{flex-direction:column}
   #login .izq{padding:32px 26px}
@@ -527,6 +535,18 @@ async function entrar(){
   await cargarServidor();
   pintarTabs();
   pintar();
+
+  if(S.rol === 'ASESOR'){
+    // Aviso 1: ventas por revisar del mes en curso, apenas entra.
+    const mAct = S.agente.m[MESES[MESES.length-1]];
+    if(mAct && mAct.pend && mAct.pend.length){
+      setTimeout(() => avisarVentasPendientes(mAct.pend.length), 700);
+    }
+    // Aviso 2: monitoreos sin firmar, a los 3 minutos de estar en la página, con sonido.
+    if(pendientesFirma() > 0){
+      setTimeout(() => avisarMonitoreosPendientes(pendientesFirma()), 3*60*1000);
+    }
+  }
 }
 
 /* ===================================================================== */
@@ -869,7 +889,7 @@ function vDesempeno(v){
   v.appendChild(s4);
 
   /* -------------------------------------------- 5. ventas por revisar */
-  const s5 = el('section','sec');
+  const s5 = el('section','sec'); s5.id = 'sec-pendientes';
   s5.appendChild(el('h3',null,'Ventas por revisar'));
   if(!m.pend.length){
     s5.appendChild(el('div','card p vacio','No tienes ventas pendientes este mes: todo lo que radicaste quedó instalado.'));
@@ -1191,6 +1211,88 @@ function montarLienzo(cv){
     borrar: () => { ctx.clearRect(0,0,cv.width,cv.height); pintado = false; },
     png:    () => cv.toDataURL('image/png')
   };
+}
+
+/* ===================================================================== */
+/*  Avisos emergentes: ventas por revisar (al entrar) y monitoreos       */
+/*  pendientes de firmar (a los 3 minutos, con sonido)                   */
+/* ===================================================================== */
+function sonidoNotificacion(){
+  try{
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if(!Ctx) return;
+    const ctx = new Ctx();
+    const t0 = ctx.currentTime;
+    // dos tonos breves, tipo "ding-dong"
+    [[880,0],[660,.16]].forEach(([freq,demora]) => {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t0+demora);
+      gain.gain.linearRampToValueAtTime(.3, t0+demora+.02);
+      gain.gain.exponentialRampToValueAtTime(.0001, t0+demora+.35);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(t0+demora); osc.stop(t0+demora+.4);
+    });
+  }catch(e){ /* un navegador que bloquee audio sin gesto previo no rompe nada */ }
+}
+
+function irASeccion(id){
+  requestAnimationFrame(() => {
+    const destino = document.getElementById(id);
+    // Sin 'behavior:smooth': en algunos navegadores (o con "reducir movimiento"
+    // activado) el scroll animado no llega a completarse y la pagina se queda
+    // arriba. El salto instantaneo si es confiable en todos los casos.
+    if(destino) destino.scrollIntoView({block:'start'});
+  });
+}
+
+function modalAviso({icono, titulo, mensaje, textoIr, alIr, textoCerrar}){
+  const m = el('div','modal aviso');
+  const cont = el('div','cont'); const cuerpo = el('div');
+  cuerpo.appendChild(el('div','aviso-ico', icono));
+  cuerpo.appendChild(el('h3',null, esc(titulo)));
+  cuerpo.appendChild(el('div','aviso-msg', mensaje));
+  const acc = el('div','acc');
+  const bIr = el('button','btn mini', esc(textoIr));
+  const bNo = el('button','btn mini sec', esc(textoCerrar || 'Más tarde'));
+  bIr.onclick = () => { m.remove(); alIr(); };
+  bNo.onclick = () => m.remove();
+  acc.appendChild(bIr); acc.appendChild(bNo);
+  cuerpo.appendChild(acc);
+  cont.appendChild(cuerpo); m.appendChild(cont);
+  m.addEventListener('click', e => { if(e.target === m) m.remove(); });
+  $('#modales').appendChild(m);
+}
+
+function avisarVentasPendientes(n){
+  modalAviso({
+    icono: '📋',
+    titulo: 'Tienes ventas por revisar',
+    mensaje: `Te ${n===1 ? 'queda 1 venta' : 'quedan ' + n + ' ventas'} sin instalar este mes.
+               Revisarlas ahora te puede salvar alguna antes de que cierre el mes.`,
+    textoIr: 'Ver ventas pendientes',
+    alIr: () => {
+      S.tab = 'desempeno';
+      S.mes = MESES[MESES.length-1];
+      pintarTabs(); pintar();
+      irASeccion('sec-pendientes');
+    }
+  });
+}
+
+function avisarMonitoreosPendientes(n){
+  sonidoNotificacion();
+  modalAviso({
+    icono: '🔔',
+    titulo: 'Tienes retroalimentación sin firmar',
+    mensaje: `Tienes ${n} monitoreo${n===1?'':'s'} pendiente${n===1?'':'s'} de leer y firmar.`,
+    textoIr: 'Ver y firmar',
+    alIr: () => {
+      S.tab = 'fb';
+      pintarTabs(); pintar();
+      window.scrollTo(0,0);
+    }
+  });
 }
 
 /* ===================================================================== */
