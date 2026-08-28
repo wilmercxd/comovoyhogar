@@ -1237,13 +1237,14 @@ function sonidoNotificacion(){
 }
 
 function irASeccion(id){
-  requestAnimationFrame(() => {
-    const destino = document.getElementById(id);
-    // Sin 'behavior:smooth': en algunos navegadores (o con "reducir movimiento"
-    // activado) el scroll animado no llega a completarse y la pagina se queda
-    // arriba. El salto instantaneo si es confiable en todos los casos.
-    if(destino) destino.scrollIntoView({block:'start'});
-  });
+  // Sin requestAnimationFrame: pintar() ya termino de armar el DOM de forma
+  // sincronica antes de que esto se llame, y si la pestaña queda en segundo
+  // plano el navegador pausa los rAF indefinidamente (el scroll nunca ocurre).
+  // Sin 'behavior:smooth' tampoco: con "reducir movimiento" activado el
+  // scroll animado no llega a completarse. El salto instantaneo es confiable
+  // en todos los casos.
+  const destino = document.getElementById(id);
+  if(destino) destino.scrollIntoView({block:'start'});
 }
 
 function modalAviso({icono, titulo, mensaje, textoIr, alIr, textoCerrar}){

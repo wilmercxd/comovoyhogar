@@ -235,6 +235,24 @@ necesita, ya es un resultado fijo:
   Aparecen en el nudge de login del asesor y en una vitrina en su vista, filtrados por
   el mes al que aplican. También quedan en el consolidado de notas del supervisor.
 
+### Avisos emergentes del asesor
+
+Dos popups, solo para `ASESOR` (nunca para el supervisor), disparados desde `entrar()`:
+
+1. **Al iniciar sesión** (~700ms después, para que la pantalla ya esté armada): si tiene
+   ventas por revisar en el mes en curso, `avisarVentasPendientes()`. El botón lo lleva a
+   la pestaña "Mi desempeño", mes en curso, con scroll directo a `#sec-pendientes`.
+2. **A los 3 minutos** de estar en la página: si tiene monitoreos/feedback sin firmar,
+   `avisarMonitoreosPendientes()`, con sonido (`sonidoNotificacion()`, un tono sintetizado
+   por Web Audio API — nada de archivo de audio que cargar). El botón lo lleva a la
+   pestaña "Retroalimentación".
+
+`irASeccion()` hace el scroll **sin** `requestAnimationFrame` ni `behavior:'smooth'` a
+propósito: si la pestaña queda en segundo plano el navegador pausa los `rAF`
+indefinidamente (el scroll nunca llega a ocurrir), y con "reducir movimiento" activado el
+scroll animado tampoco termina. El salto instantáneo es el único que es confiable en
+cualquier circunstancia — se verificó exactamente ese fallo al probarlo.
+
 ### Sobre este modelo de acceso
 
 Los tres datos (cédula, cédula otra vez y apellido) circulan dentro del piso: quien los
