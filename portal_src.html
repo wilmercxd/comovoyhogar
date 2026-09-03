@@ -631,7 +631,10 @@ function vDesempeno(v){
   const prev = MESES[MESES.indexOf(mk)-1];
   const ant  = prev ? a.m[prev] : null;
 
-  if(!mes.cerrado) v.appendChild(nudgeBanner(m, mk));
+  // La liga y el mensaje de ritmo se calculan sobre el cumplimiento; sin
+  // meta definida todavia (ej. septiembre antes de que lleguen sus metas) no
+  // hay nada que clasificar.
+  if(!mes.cerrado && m.meta != null) v.appendChild(nudgeBanner(m, mk));
 
   const misRecon = misReconocimientos().filter(r => r.mes === mk);
   if(misRecon.length){
@@ -686,6 +689,30 @@ function vDesempeno(v){
   /* ------------------------------------- 2. proyección / cierre + comisión */
   const s2 = el('section','sec');
   s2.appendChild(el('h3',null, mes.cerrado ? 'Cómo cerraste el mes' : 'Proyección al cierre de mes'));
+
+  if(m.meta == null){
+    // Mes sin metas de comisión confirmadas todavía (ej. septiembre antes de
+    // que llegue el PDF de comisiones de ese mes): se muestran instaladas y
+    // proyección, sin piso, puesto en el ranking ni comisión inventados.
+    const cSinMeta = el('div','card p');
+    cSinMeta.innerHTML = `
+      <div style="font-size:11.5px;font-weight:650;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em">
+        ${mes.cerrado ? 'Instaladas al cierre' : 'Proyección de instaladas'}</div>
+      <div style="font-size:44px;font-weight:750;letter-spacing:-.03em;margin:4px 0 14px">${un1(m.proy)}</div>
+      <div class="callout" style="margin:0">
+        <b>Las metas de comisión de ${esc(mes.corto)} todavía no están definidas.</b> Aquí ves
+        tus instaladas y tu proyección; en cuanto lleguen los pisos de este mes, esta sección
+        vuelve a mostrar tu comisión proyectada.
+      </div>`;
+    const agend0 = m.pend.filter(p => p.est === 'AGENDADO').length;
+    if(agend0 && !mes.cerrado){
+      cSinMeta.insertAdjacentHTML('beforeend',
+        `<div class="nota" style="margin-top:12px">Además tienes <b>${agend0} venta${agend0===1?'':'s'} agendada${agend0===1?'':'s'}</b>
+         esperando instalación. Si todas entran, cierras cerca de <b>${un1(m.instC + agend0)}</b>.</div>`);
+    }
+    s2.appendChild(cSinMeta);
+    v.appendChild(s2);
+  } else {
 
   const puesto = ranking(mk).findIndex(x => x.cc === a.cc) + 1;
   const total  = D.agentes.filter(x => x.m[mk]).length;
@@ -785,6 +812,7 @@ function vDesempeno(v){
       `Nota: el consolidado oficial de ${esc(mes.corto)} te reportó <b>${m.oficial}</b> instaladas. Aquí ves <b>${m.inst}</b> porque se cuentan las ventas de la sábana con fecha de agenda dentro del mes. Si la diferencia te afecta, revísala con tu supervisor.`));
   }
   v.appendChild(s2);
+  } // fin del bloque "m.meta != null"
 
   /* --------------------------------------------------- 2b. Personal Best */
   if(!mes.cerrado && m.pb){
@@ -849,7 +877,9 @@ function vDesempeno(v){
   const env = el('div','card envolt'); env.appendChild(tw);
   s3.appendChild(env);
 
-  const escSem = esq.sem.map(([d,val]) => `${d} ventas ${pes(val)}`).join(' · ');
+  // Solo se usa mas abajo si mes.bonoSem; sin esquema (esq=null) tampoco hay
+  // bonoSem, asi que esta linea puede saltarse sin que falte nada.
+  const escSem = esq ? esq.sem.map(([d,val]) => `${d} ventas ${pes(val)}`).join(' · ') : '';
   s3.appendChild(el('div','nota',
     `Las semanas van de lunes a sábado y no se cuentan los domingos ni los festivos${
       mes.festivos.length ? ' (' + mes.festivos.map(f => fechaCorta(f.f)).join(' y ') + ')' : ''
@@ -1468,10 +1498,18 @@ function vEquipo(v){
 
   const s0 = el('section','sec');
   s0.appendChild(el('h3',null,`Equipo · ${esc(mes.nombre)}`));
+  if(!mes.tieneEsquema){
+    s0.appendChild(el('div','callout',
+      `<b>${esc(mes.corto)} todavía no tiene metas de comisión confirmadas.</b> Se muestran
+       instaladas, proyección y ventas por revisar; cumplimiento y comisión aparecen en cuanto
+       lleguen los pisos de este mes.`));
+  }
   const g = el('div','kpis');
   g.appendChild(kpi('Instaladas del equipo', un1(tot.inst),
     mes.cerrado ? 'Cierre del mes' : `Al corte del ${fechaCorta(D.corte)} · proyección ${un1(tot.proy)}`));
-  g.appendChild(kpi('Cumplimiento', pct(cumplEq), `Meta sumada del equipo: ${tot.meta}`));
+  if(mes.tieneEsquema){
+    g.appendChild(kpi('Cumplimiento', pct(cumplEq), `Meta sumada del equipo: ${tot.meta}`));
+  }
   g.appendChild(kpi('Contrato digital',
     (tot.gest ? Math.round(100*tot.dig/tot.gest) : 0)+'<small>%</small>',
     `${tot.dig} de ${tot.gest} ventas radicadas`));
@@ -1515,12 +1553,13 @@ function vEquipo(v){
       <td><span class="tag n">${esc(f.equipo)}</span></td>
       <td class="n destaca">${f.inst}</td>
       <td class="n" style="color:var(--tx2)">${f.gest}</td>
-      <td class="n" style="color:var(--tx3)">${f.meta}</td>
+      <td class="n" style="color:var(--tx3)">${f.meta ?? '—'}</td>
       <td class="n">${un1(f.proy)}</td>
-      <td class="n"><span class="tag ${semaforo(f.cumpl)==='ok'?'g':semaforo(f.cumpl)==='am'?'a':'r'}">${pct(f.cumpl)}</span></td>
+      <td class="n">${f.cumpl == null ? '<span class="tag n">—</span>'
+        : `<span class="tag ${semaforo(f.cumpl)==='ok'?'g':semaforo(f.cumpl)==='am'?'a':'r'}">${pct(f.cumpl)}</span>`}</td>
       <td class="n">${f.digPct}%</td>
       <td class="n">${f.ott}</td>
-      <td class="n destaca">${pes(f.total)}</td>
+      <td class="n destaca">${f.total == null ? '—' : pes(f.total)}</td>
       <td class="n">${f.pend ? `<span class="tag a">${f.pend}</span>` : '<span style="color:var(--tx3)">0</span>'}</td>
       <td class="n">${f.firmasPend ? `<span class="tag r">${f.firmasPend}</span>` : '<span style="color:var(--tx3)">0</span>'}</td>`;
     tb.appendChild(tr);

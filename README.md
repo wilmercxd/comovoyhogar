@@ -117,6 +117,15 @@ nombres traen variantes normales (apellidos truncados) que no son error.
 `Esquema($mes, $tipo)` del generador y se emite en el JSON indexado por mes, para que
 el portal pueda mostrar cada mes con las reglas con las que se cerró.
 
+**Un mes sin metas confirmadas todavía (ej. septiembre antes de que llegue su PDF de
+comisiones) no se inventa nada.** `$MESES_CON_ESQUEMA` es la lista de meses con esquema
+real; si un mes no está ahí, `Esquema()` devuelve `$null` y ese mes sale del JSON con
+`meta/cumpl/piso/tarifa/total/garantizada/sigEsc` en `null` (y `extra:0`). El portal
+reconoce `meta == null` y muestra solo instaladas + proyección, con un aviso de que las
+metas todavía no están definidas — nunca un `$0` o `0%` que parezca un resultado real.
+Para activar el esquema de un mes nuevo, agregarlo a `$MESES_CON_ESQUEMA` y a
+`$ESQ_TIPO` (o a `Esquema()` si el mes trae una regla distinta a las ya definidas).
+
 **Hasta julio de 2026** — cada quien por su tipo, según `roster.csv`:
 
 | Piso | Outbound · mes | Omnicanal (`BLASTER`) · mes |
@@ -363,6 +372,7 @@ rótala en Supabase → Settings → API Keys.
 | El día del corte muestra muy pocas instaladas | Normal: los estados de instalación llegan con un día de rezago. El día del corte siempre sale subestimado y se completa al día siguiente |
 | Un asesor sale dos veces | Mojibake en los nombres. Se agrupa siempre por cédula, nunca por nombre |
 | KPIs en cero sin explicación | El nombre de una columna cambió entre exportes. Las columnas se resuelven ignorando espacios y mayúsculas |
+| `gest`/`digPct` mal para un asesor con exactamente 1 venta en el mes | Trampa de PowerShell: `$x = if(...) { @(...) } else { @(...) }` "desenreda" el resultado a un escalar cuando la rama ejecutada emite un solo objeto, aunque esa rama ya use `@()`. `.Count` sobre ese escalar da `$null` (no 1), y `$null -eq 0` es `$false`, así que el filtro de "sin ventas" tampoco lo detecta. El `@()` tiene que envolver el `if/else` completo, no cada rama por separado |
 | «row violates row-level security» al firmar | La cédula de la sesión no coincide con la del feedback, o no se ejecutó el `schema.sql` completo |
 | «Database error querying schema» al entrar | Una cuenta de `auth.users` quedó con campos de token en `NULL`; GoTrue los lee como texto y revienta. Lo arregla el bloque de reparación al final de `cuentas.sql` |
 | «tu cuenta todavía no está lista» al entrar | Falta ejecutar `cuentas.sql`, o la persona se agregó a `roster.csv` pero no a `usuarios` |

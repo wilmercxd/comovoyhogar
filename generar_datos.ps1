@@ -106,7 +106,14 @@ $ESQ_TIPO = [ordered]@{
 # OUTBOUND o BLASTER. Julio conserva el esquema por tipo con el que se cerro.
 $MES_UNIFICADO = '2026-08'
 
+# Meses que YA tienen metas de comision confirmadas. Un mes que no aparezca
+# aqui (ej. septiembre, mientras no llegue el PDF de comisiones de ese mes)
+# no tiene esquema: Esquema() devuelve $null y el mes se muestra con
+# instaladas y proyeccion, pero sin piso, tarifa ni comision inventados.
+$MESES_CON_ESQUEMA = @('2026-07','2026-08')
+
 function Esquema([string]$mk, [string]$tipo) {
+  if ($MESES_CON_ESQUEMA -notcontains $mk) { return $null }
   if ($mk -ge $MES_UNIFICADO) { return $ESQ_TIPO.BLASTER }
   return $ESQ_TIPO[$tipo]
 }
@@ -170,7 +177,7 @@ $COLS = @{
   asesor  = @('ASESOR')
   estado  = @('ESTADO DIGITACION')
   motivo  = @('MOTIVO DE INCUMPLIMIENTO')
-  agenda  = @('FECHA AGENDA')
+  agenda  = @('FECHA AGENDA','FECHA DE AGENDA')
   venta   = @('FECHA DE VENTA')
   instal  = @('FECHA INSTALACION')
   cliCC   = @('CC CLIENTE')
@@ -367,8 +374,10 @@ foreach ($mk in $clavesMes) {
     fin      = $ultimo.ToString('yyyy-MM-dd')
     hab      = [ordered]@{ tot=$tot; tr=$tr; rest=[math]::Max(0,$tot-$tr) }
     festivos = $fest
-    # El bono semanal arranca en agosto de 2026 (ver COMISIONES AGOSTO.pdf).
-    bonoSem  = ($mk -ge '2026-08')
+    # El bono semanal arranca en agosto de 2026 (ver COMISIONES AGOSTO.pdf),
+    # pero solo si el mes ya tiene esquema: sin eso no hay tarifa que aplicar.
+    bonoSem  = ($mk -ge '2026-08') -and ($MESES_CON_ESQUEMA -contains $mk)
+    tieneEsquema = ($MESES_CON_ESQUEMA -contains $mk)
     semanas  = @($sem | ForEach-Object {
                  [ordered]@{ n=$_.n; ini=$_.ini.ToString('yyyy-MM-dd'); fin=$_.fin.ToString('yyyy-MM-dd')
                              dias=$_.dias; abierta=(-not $cerrado -and $fCorte -le $_.fin -and $fCorte -ge $_.ini)
@@ -395,11 +404,19 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
     # abierto): todavia no existe una pestaña para ese mes, asi que cuenta
     # aqui hasta que el mes en curso cierre. Los meses ya cerrados solo
     # toman su propio mes exacto.
-    $delMes = if ($mk -eq $mkCorte) {
-      @($mis | Where-Object { $_.agenda.ToString('yyyy-MM') -ge $mk })
+    # El @() tiene que envolver TODO el if/else, no cada rama por separado: si
+    # la rama ejecutada emite un solo objeto (un asesor con exactamente 1
+    # venta ese mes), PowerShell "desenreda" el resultado del if/else a un
+    # escalar sin importar que la rama interna ya estuviera en @(). Sobre un
+    # escalar, .Count no existe (da $null, no 1) y $null -eq 0 es $false, asi
+    # que el filtro de "sin ventas este mes" tampoco lo detecta: el mes queda
+    # con datos a medias (gest/digPct mal) en silencio. Encontrado con Jesus
+    # y Martha en septiembre, ambos con exactamente 1 venta ese mes.
+    $delMes = @(if ($mk -eq $mkCorte) {
+      $mis | Where-Object { $_.agenda.ToString('yyyy-MM') -ge $mk }
     } else {
-      @($mis | Where-Object { $_.agenda.ToString('yyyy-MM') -eq $mk })
-    }
+      $mis | Where-Object { $_.agenda.ToString('yyyy-MM') -eq $mk }
+    })
     if ($delMes.Count -eq 0) { continue }
 
     $inst = @($delMes | Where-Object { $_.estado -eq 'INSTALADO' })
@@ -424,8 +441,14 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
     $semJson = @()
     foreach ($s in $info.sem) {
       $n = @($inst | Where-Object { $_.agenda -ge $s.ini -and $_.agenda -le $s.fin }).Count
-      $p = Piso $esq.sem $n
-      $semJson += [ordered]@{ n=$s.n; inst=$n; piso=$p.piso; tarifa=$p.tarifa; com=$p.com }
+      if ($esq) {
+        $p = Piso $esq.sem $n
+        $semJson += [ordered]@{ n=$s.n; inst=$n; piso=$p.piso; tarifa=$p.tarifa; com=$p.com }
+      } else {
+        # Sin esquema todavia (ej. septiembre sin metas confirmadas): se
+        # muestran las instaladas de la semana, sin piso ni comision inventados.
+        $semJson += [ordered]@{ n=$s.n; inst=$n; piso=$null; tarifa=$null; com=$null }
+      }
     }
 
     # -------- racha de ventas y Personal Best (dias completos, sin el dia del
@@ -500,27 +523,54 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
       if ($proy -lt $iTot) { $proy = [double]$iTot }   # nunca proyectar por debajo de lo ya logrado
     }
 
-    $meta   = $esq.mes[0][0]
-    $pMes   = Piso $esq.mes $iTot
-    $pProy  = Piso $esq.mes $proy
-    $extra = 0
-    if ($mesesJson[$mk].bonoSem) { foreach ($s in $semJson) { $extra += $s.com } }
-
     $ritmo  = [math]::Round($iCorte / $info.tr, 2)
     $rest   = [math]::Max(0, $info.tot - $info.tr)
 
-    # cuanto falta para el siguiente escalon del mes
-    $sig = $null
-    foreach ($e in $esq.mes) { if ($proy -lt $e[0]) { $sig = $e; break } }
-    $req = $null; $esf = $null
-    if ($sig -and $rest -gt 0) {
-      $faltan = $sig[0] - $iCorte
-      $req = [math]::Round($faltan / $rest, 2)
-      if ($ritmo -gt 0) { $esf = [math]::Round(($req/$ritmo) - 1, 3) }
+    if ($esq) {
+      $meta   = $esq.mes[0][0]
+      $pMes   = Piso $esq.mes $iTot
+      $pProy  = Piso $esq.mes $proy
+      $extra = 0
+      if ($mesesJson[$mk].bonoSem) { foreach ($s in $semJson) { $extra += $s.com } }
+
+      # cuanto falta para el siguiente escalon del mes
+      $sig = $null
+      foreach ($e in $esq.mes) { if ($proy -lt $e[0]) { $sig = $e; break } }
+      $req = $null; $esf = $null
+      if ($sig -and $rest -gt 0) {
+        $faltan = $sig[0] - $iCorte
+        $req = [math]::Round($faltan / $rest, 2)
+        if ($ritmo -gt 0) { $esf = [math]::Round(($req/$ritmo) - 1, 3) }
+      }
+
+      $datosComision = [ordered]@{
+        esq    = $esq.nombre
+        meta   = $meta
+        cumpl  = [math]::Round($proy/$meta,3)
+        cumplH = [math]::Round($iTot/$meta,3)
+        piso   = $pProy.piso
+        tarifa = $pProy.tarifa
+        comBase= [math]::Round($proy * $pProy.tarifa)
+        comHoy = $pMes.com
+        extra  = $extra
+        total  = [math]::Round($proy * $pProy.tarifa) + $extra
+        # Comisión ya asegurada con lo REALMENTE instalado (no la proyección):
+        # base sobre instaladas reales + el extra bono, que ya se calcula sobre
+        # instaladas reales de cada semana. Nunca es mayor que 'total'.
+        garantizada = $pMes.com + $extra
+        sigEsc = if ($sig) { @($sig[0],$sig[1]) } else { $null }
+      }
+    } else {
+      # Sin metas de comision confirmadas para este mes todavia: se muestran
+      # instaladas y proyeccion (mas abajo), pero nada de piso/tarifa/comision
+      # inventado. El portal reconoce 'meta:null' y oculta esa parte sola.
+      $datosComision = [ordered]@{
+        esq=$null; meta=$null; cumpl=$null; cumplH=$null; piso=$null; tarifa=$null
+        comBase=$null; comHoy=$null; extra=0; total=$null; garantizada=$null; sigEsc=$null
+      }
     }
 
-    $mJson[$mk] = [ordered]@{
-      esq    = $esq.nombre
+    $mJson[$mk] = [ordered]@{} + $datosComision + [ordered]@{
       inst   = $iTot
       instC  = $iCorte
       gest   = $delMes.Count
@@ -529,26 +579,10 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
       ott    = $nOtt
       ottDet = @($accOtt.GetEnumerator() | Sort-Object Value -Descending | ForEach-Object { ,@($_.Key,$_.Value) })
       vasDet = @($accVas.GetEnumerator() | Sort-Object Value -Descending | ForEach-Object { ,@($_.Key,$_.Value) })
-      meta   = $meta
       proy   = $proy
-      cumpl  = [math]::Round($proy/$meta,3)
-      cumplH = [math]::Round($iTot/$meta,3)
-      piso   = $pProy.piso
-      tarifa = $pProy.tarifa
-      comBase= [math]::Round($proy * $pProy.tarifa)
-      comHoy = $pMes.com
-      extra  = $extra
-      total  = [math]::Round($proy * $pProy.tarifa) + $extra
-      # Comisión ya asegurada con lo REALMENTE instalado (no la proyección):
-      # base sobre instaladas reales + el extra bono, que ya se calcula sobre
-      # instaladas reales de cada semana. Nunca es mayor que 'total'.
-      garantizada = $pMes.com + $extra
       racha  = [ordered]@{ actual=$rachaActual; mejor=$mejorRacha; comodinUsado=($saltos -gt 0) }
       pb     = $pb
       ritmo  = $ritmo
-      req    = $req
-      esf    = $esf
-      sigEsc = if ($sig) { @($sig[0],$sig[1]) } else { $null }
       sem    = $semJson
       estados= $estados
       pend   = $pend
@@ -580,9 +614,14 @@ $esqJson = [ordered]@{}
 foreach ($mk in $clavesMes) {
   $esqJson[$mk] = [ordered]@{}
   foreach ($t in $ESQ_TIPO.Keys) { $esqJson[$mk][$t] = Esquema $mk $t }
-  $uni = ((Esquema $mk 'OUTBOUND').nombre -eq (Esquema $mk 'BLASTER').nombre)
-  $esqJson[$mk]['unificado'] = $uni
-  if ($uni) { Ok "$mk usa un solo esquema para todo el equipo: $((Esquema $mk 'OUTBOUND').nombre)" }
+  if ($MESES_CON_ESQUEMA -notcontains $mk) {
+    $esqJson[$mk]['unificado'] = $false
+    Avi "$mk todavia no tiene metas de comision confirmadas: se muestran instaladas y proyeccion, sin piso ni comision"
+  } else {
+    $uni = ((Esquema $mk 'OUTBOUND').nombre -eq (Esquema $mk 'BLASTER').nombre)
+    $esqJson[$mk]['unificado'] = $uni
+    if ($uni) { Ok "$mk usa un solo esquema para todo el equipo: $((Esquema $mk 'OUTBOUND').nombre)" }
+  }
 }
 
 $doc = [ordered]@{
