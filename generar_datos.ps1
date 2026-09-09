@@ -395,7 +395,18 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
   $mis = @($todas | Where-Object { $_.cc -eq $cc })
   $mJson = [ordered]@{}
 
+  # Un asesor retirado sigue en el roster para que sus ventas de los meses en
+  # que estuvo activo NO desaparezcan (borrarlo del roster borraria su historia:
+  # ej. 69 instaladas de agosto). Su fecha de retiro solo evita que reaparezca en
+  # meses POSTERIORES a su salida por ventas colgadas (ej. una OT reagendada por
+  # su reemplazo a un mes en el que el ya no estaba). El mes de la salida cuenta
+  # completo: una venta suya que se instala despues de su ultimo dia igual es
+  # suya (confirmado con Wilmer el 09/09/2026).
+  $fRetiro  = if ($a.retiro) { Get-Fecha $a.retiro } else { $null }
+  $mkRetiro = if ($fRetiro) { $fRetiro.ToString('yyyy-MM') } else { $null }
+
   foreach ($mk in $clavesMes) {
+    if ($mkRetiro -and $mk -gt $mkRetiro) { continue }
     $info = $mesesInfo[$mk]
     $esq  = Esquema $mk $a.tipo
 
@@ -601,6 +612,7 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
     tipo   = $a.tipo
     equipo = $ESQ_TIPO[$a.tipo].nombre    # su tipo base; el del mes va en m[mes].esq
     ing    = if ($a.ingreso) { (Get-Fecha $a.ingreso).ToString('yyyy-MM-dd') } else { $null }
+    retiro = if ($fRetiro) { $fRetiro.ToString('yyyy-MM-dd') } else { $null }
     m      = $mJson
   }
   $u = $mJson[$clavesMes[-1]]
