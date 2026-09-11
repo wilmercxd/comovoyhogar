@@ -244,7 +244,13 @@ insert into public.usuarios (cc, nombre, rol) values
   ('1044213250','NICOLLE ALEMAN RIVERA','ASESOR'),
   ('1007541668','RONALDO ALBERTO GOMEZ PEREZ','ASESOR'),
   ('1140847397','ROSA MARGARITA TIBABIJO SALINAS','ASESOR'),
-  ('1193561818','YERALDIN MOLINA MUÑOZ','ASESOR')
+  ('1193561818','YERALDIN MOLINA MUÑOZ','ASESOR'),
+  -- Altas de septiembre 2026 (ver altas_septiembre_2026.sql)
+  ('1044628010','ALEXANDRA MICHELL MIER HERNANDEZ','ASESOR'),
+  ('1102825797','MARIA JOSE ZUÑIGA PALACIO','ASESOR'),
+  ('1066864972','ANDRES MAURICIO RUIDIAZ GOMEZ','ASESOR'),
+  ('1001997640','CAMILO ANDRES CABARCAS ESCORCIA','ASESOR'),
+  ('22550093','JARIET GUZMAN MUÑOZ','ASESOR')
 on conflict (cc) do update set nombre = excluded.nombre, rol = excluded.rol;
 
 -- ==========================================================================
