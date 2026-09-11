@@ -175,7 +175,11 @@ if ($archivos.Count -eq 0) { throw "No se encontro ninguna 'SABANA HOGAR*.csv' e
 $COLS = @{
   cc      = @('CC ASESOR')
   asesor  = @('ASESOR')
-  estado  = @('ESTADO DIGITACION')
+  # La sabana de septiembre 2026 exporta la columna de estado con el encabezado
+  # 'RECHAZADO' (mismo contenido: INSTALADO/AGENDADO/RECHAZADO/OT CANCELADA/NO
+  # INSTALADO). Se busca 'ESTADO DIGITACION' primero; solo se cae a 'RECHAZADO'
+  # cuando la primera no existe, para no confundirla en sabanas que traigan ambas.
+  estado  = @('ESTADO DIGITACION','RECHAZADO')
   motivo  = @('MOTIVO DE INCUMPLIMIENTO')
   agenda  = @('FECHA AGENDA','FECHA DE AGENDA')
   venta   = @('FECHA DE VENTA')
@@ -221,7 +225,13 @@ $fueraCampana = 0
 
 foreach ($f in ($archivos | Sort-Object @{ Expression = { Fecha-Archivo $_ } })) {
   $fArchivo = Fecha-Archivo $f
-  $filas = Import-Csv $f.FullName -Delimiter ';'
+  # El delimitador cambia entre exportes: las sabanas viejas vienen con ';', la
+  # de septiembre 2026 en adelante viene separada por TAB. Se detecta con la
+  # primera linea (mas TABs que ';' -> TSV) en vez de asumir uno fijo, que era
+  # lo que dejaba la sabana de septiembre en 0 filas ("falta la columna ...").
+  $primera = Get-Content $f.FullName -TotalCount 1 -Encoding UTF8
+  $delim = if ((($primera -split "`t").Count - 1) -gt (($primera -split ';').Count - 1)) { "`t" } else { ';' }
+  $filas = Import-Csv $f.FullName -Delimiter $delim -Encoding UTF8
   if ($filas.Count -eq 0) { Avi "$($f.Name) esta vacio"; continue }
 
   foreach ($k in @('cc','estado','agenda','contrato','adic')) {
