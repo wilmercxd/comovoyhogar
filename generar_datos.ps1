@@ -107,22 +107,62 @@ $ESQ_TIPO = [ordered]@{
 $MES_UNIFICADO = '2026-08'
 
 # Meses que YA tienen metas de comision confirmadas. Un mes que no aparezca
-# aqui (ej. septiembre, mientras no llegue el PDF de comisiones de ese mes)
-# no tiene esquema: Esquema() devuelve $null y el mes se muestra con
-# instaladas y proyeccion, pero sin piso, tarifa ni comision inventados.
-$MESES_CON_ESQUEMA = @('2026-07','2026-08')
+# aqui no tiene esquema: se muestra con instaladas y proyeccion, pero sin piso,
+# tarifa ni comision inventados.
+$MESES_CON_ESQUEMA = @('2026-07','2026-08','2026-09')
 
-function Esquema([string]$mk, [string]$tipo) {
+# --- SEPTIEMBRE 2026: modelo NUEVO, aprobado por nomina (tablas ACCESOS 6 HORAS)
+# Cambia respecto a jul/ago en dos cosas:
+#  1) Vuelven TRES skills distintos (antes ago unificaba en Omnicanal).
+#  2) Ya NO se paga tarifa por instalada, sino una BONIFICACION PLANA por el piso
+#     mas alto de instaladas alcanzado (no se acumulan pisos; por debajo del piso
+#     1 = $0). No hay bono semanal en septiembre.
+# escalones = [instaladas_desde, bono_plano]. Confirmado con Wilmer 11/09/2026.
+$ESQ_SEP = [ordered]@{
+  BLASTER   = [ordered]@{ nombre='Blaster';   bono=$true; mes=@(@(30,400000),@(35,800000),@(40,2000000)); sem=@() }
+  OUTBOUND  = [ordered]@{ nombre='Outbound';  bono=$true; mes=@(@(20,400000),@(25,1000000),@(35,2000000)); sem=@() }
+  OMNICANAL = [ordered]@{ nombre='Omnicanal'; bono=$true; mes=@(@(35,400000),@(40,800000),@(45,2000000)); sem=@() }
+}
+# Clasificacion de skill valida para SEPTIEMBRE (por cedula). Se mantiene aparte
+# de la columna 'tipo' del roster a proposito: 'tipo' es el esquema con el que se
+# cerro JULIO y no se puede tocar sin restatear un mes ya pagado. Un mes futuro
+# con reclasificacion de skills se resuelve agregando su propio mapa aqui.
+$SKILL_SEP = @{
+  '1042854178'='BLASTER'; '1042994663'='BLASTER'; '1123891335'='BLASTER'; '1143232881'='BLASTER'
+  '1143445082'='BLASTER'; '1044628010'='BLASTER'; '1143154495'='BLASTER'; '1140847397'='BLASTER'
+  '1102825797'='BLASTER'; '1140828545'='BLASTER'
+  '1066864972'='OUTBOUND'; '1001997640'='OUTBOUND'; '22550093'='OUTBOUND'
+  '1001995827'='OMNICANAL'; '1041890641'='OMNICANAL'; '1044213250'='OMNICANAL'
+  '1007541668'='OMNICANAL'; '1193561818'='OMNICANAL'
+}
+
+# Skill que aplica a un asesor en un mes dado. Septiembre usa $SKILL_SEP; los
+# meses anteriores usan el 'tipo' del roster (el esquema con que cerraron).
+function SkillMes([string]$mk, [string]$cc, [string]$tipo) {
+  if ($mk -eq '2026-09' -and $SKILL_SEP.ContainsKey($cc)) { return $SKILL_SEP[$cc] }
+  return $tipo
+}
+
+function Esquema([string]$mk, [string]$tipo, [string]$cc='') {
   if ($MESES_CON_ESQUEMA -notcontains $mk) { return $null }
+  if ($mk -eq '2026-09') {
+    $sk = SkillMes $mk $cc $tipo
+    if ($ESQ_SEP.Contains($sk)) { return $ESQ_SEP[$sk] } else { return $ESQ_SEP.BLASTER }
+  }
   if ($mk -ge $MES_UNIFICADO) { return $ESQ_TIPO.BLASTER }
   return $ESQ_TIPO[$tipo]
 }
-function Piso($escalones,[double]$ventas){
+# Piso alcanzado y su valor. Para jul/ago (tarifa por instalada) 'com' = ventas x
+# tarifa. Para septiembre (bono plano) 'tarifa' ES el bono del piso y 'com' = ese
+# mismo bono (no se multiplica por instaladas), respetando "piso mas alto, sin
+# acumular". Por debajo del piso 1, piso=0 y com=0.
+function Piso($escalones,[double]$ventas,[bool]$bono=$false){
   $piso = 0; $tarifa = 0
   for ($i=0; $i -lt $escalones.Count; $i++) {
     if ($ventas -ge $escalones[$i][0]) { $piso = $i+1; $tarifa = $escalones[$i][1] }
   }
-  return @{ piso = $piso; tarifa = $tarifa; com = [math]::Round($ventas * $tarifa) }
+  $com = if ($bono) { $tarifa } else { [math]::Round($ventas * $tarifa) }
+  return @{ piso = $piso; tarifa = $tarifa; com = $com }
 }
 
 # ------------------------------------------------------------------ OTT/VAS
@@ -384,9 +424,10 @@ foreach ($mk in $clavesMes) {
     fin      = $ultimo.ToString('yyyy-MM-dd')
     hab      = [ordered]@{ tot=$tot; tr=$tr; rest=[math]::Max(0,$tot-$tr) }
     festivos = $fest
-    # El bono semanal arranca en agosto de 2026 (ver COMISIONES AGOSTO.pdf),
-    # pero solo si el mes ya tiene esquema: sin eso no hay tarifa que aplicar.
-    bonoSem  = ($mk -ge '2026-08') -and ($MESES_CON_ESQUEMA -contains $mk)
+    # El bono semanal existio SOLO en agosto de 2026 (ver COMISIONES AGOSTO.pdf).
+    # Septiembre cambio a bono mensual por piso, sin componente semanal
+    # (confirmado con Wilmer 11/09/2026). Si vuelve, agregar el mes aqui.
+    bonoSem  = ($mk -eq '2026-08')
     tieneEsquema = ($MESES_CON_ESQUEMA -contains $mk)
     semanas  = @($sem | ForEach-Object {
                  [ordered]@{ n=$_.n; ini=$_.ini.ToString('yyyy-MM-dd'); fin=$_.fin.ToString('yyyy-MM-dd')
@@ -418,7 +459,8 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
   foreach ($mk in $clavesMes) {
     if ($mkRetiro -and $mk -gt $mkRetiro) { continue }
     $info = $mesesInfo[$mk]
-    $esq  = Esquema $mk $a.tipo
+    $esq  = Esquema $mk $a.tipo $cc
+    $skillMes = SkillMes $mk $cc $a.tipo
 
     # El mes en curso (el del corte) absorbe cualquier agenda mas futura
     # (ej. una instalacion agendada para septiembre mientras agosto sigue
@@ -462,12 +504,12 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
     $semJson = @()
     foreach ($s in $info.sem) {
       $n = @($inst | Where-Object { $_.agenda -ge $s.ini -and $_.agenda -le $s.fin }).Count
-      if ($esq) {
+      if ($esq -and -not $esq.bono -and $esq.sem.Count) {
         $p = Piso $esq.sem $n
         $semJson += [ordered]@{ n=$s.n; inst=$n; piso=$p.piso; tarifa=$p.tarifa; com=$p.com }
       } else {
-        # Sin esquema todavia (ej. septiembre sin metas confirmadas): se
-        # muestran las instaladas de la semana, sin piso ni comision inventados.
+        # Sin bono semanal (septiembre: modelo de bono mensual por piso; o un mes
+        # sin esquema): se muestran las instaladas de la semana, sin comision.
         $semJson += [ordered]@{ n=$s.n; inst=$n; piso=$null; tarifa=$null; com=$null }
       }
     }
@@ -547,7 +589,32 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
     $ritmo  = [math]::Round($iCorte / $info.tr, 2)
     $rest   = [math]::Max(0, $info.tot - $info.tr)
 
-    if ($esq) {
+    if ($esq -and $esq.bono) {
+      # ----- SEPTIEMBRE: bono plano por piso mas alto de instaladas (no acumula,
+      # no hay tarifa por instalada, no hay bono semanal). tarifa/comBase quedan
+      # en null: son conceptos del modelo viejo que el portal oculta.
+      $meta   = $esq.mes[0][0]
+      $pMes   = Piso $esq.mes $iTot $true    # bono asegurado con instaladas reales
+      $pProy  = Piso $esq.mes $proy $true    # bono proyectado al cierre
+
+      $sig = $null
+      foreach ($e in $esq.mes) { if ($proy -lt $e[0]) { $sig = $e; break } }
+
+      $datosComision = [ordered]@{
+        esq    = $esq.nombre
+        meta   = $meta
+        cumpl  = [math]::Round($proy/$meta,3)
+        cumplH = [math]::Round($iTot/$meta,3)
+        piso   = $pProy.piso
+        tarifa = $null
+        comBase= $null
+        comHoy = $pMes.com
+        extra  = 0
+        total  = $pProy.com          # bono del piso proyectado
+        garantizada = $pMes.com      # bono del piso ya asegurado con instaladas reales
+        sigEsc = if ($sig) { @($sig[0],$sig[1]) } else { $null }
+      }
+    } elseif ($esq) {
       $meta   = $esq.mes[0][0]
       $pMes   = Piso $esq.mes $iTot
       $pProy  = Piso $esq.mes $proy
@@ -592,6 +659,7 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
     }
 
     $mJson[$mk] = [ordered]@{} + $datosComision + [ordered]@{
+      skill  = $skillMes    # esquema que aplica ese mes (clave en D.esquema[mk])
       inst   = $iTot
       instC  = $iCorte
       gest   = $delMes.Count
@@ -635,11 +703,18 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
 $esqJson = [ordered]@{}
 foreach ($mk in $clavesMes) {
   $esqJson[$mk] = [ordered]@{}
-  foreach ($t in $ESQ_TIPO.Keys) { $esqJson[$mk][$t] = Esquema $mk $t }
-  if ($MESES_CON_ESQUEMA -notcontains $mk) {
+  if ($mk -eq '2026-09') {
+    # Septiembre: tres skills distintos, cada uno con su esquema de bono plano.
+    # Se emiten las tres claves (BLASTER/OUTBOUND/OMNICANAL); el portal elige la
+    # del asesor via m[mes].skill.
+    foreach ($t in $ESQ_SEP.Keys) { $esqJson[$mk][$t] = $ESQ_SEP[$t] }
+    $esqJson[$mk]['unificado'] = $false
+    Ok "$mk usa el modelo de bono mensual por piso: Blaster / Outbound / Omnicanal por separado"
+  } elseif ($MESES_CON_ESQUEMA -notcontains $mk) {
     $esqJson[$mk]['unificado'] = $false
     Avi "$mk todavia no tiene metas de comision confirmadas: se muestran instaladas y proyeccion, sin piso ni comision"
   } else {
+    foreach ($t in $ESQ_TIPO.Keys) { $esqJson[$mk][$t] = Esquema $mk $t }
     $uni = ((Esquema $mk 'OUTBOUND').nombre -eq (Esquema $mk 'BLASTER').nombre)
     $esqJson[$mk]['unificado'] = $uni
     if ($uni) { Ok "$mk usa un solo esquema para todo el equipo: $((Esquema $mk 'OUTBOUND').nombre)" }
