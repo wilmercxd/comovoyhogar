@@ -239,6 +239,13 @@ main{max-width:1240px;margin:0 auto;padding:24px 22px 70px}
 .mon-sec{padding:15px 18px;border-bottom:1px solid var(--linea)}
 .mon-sec h5{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);margin-bottom:7px}
 .mon-sec p{font-size:13.8px;color:var(--tx2);line-height:1.6;margin:0;white-space:pre-wrap}
+.mon-trans summary{display:flex;align-items:baseline;gap:10px;cursor:pointer;list-style:none}
+.mon-trans summary::-webkit-details-marker{display:none}
+.mon-trans summary h5{margin-bottom:0}
+.mon-trans summary span{font-size:12px;color:var(--tx3)}
+.mon-trans[open] summary span{display:none}
+.mon-trans p{margin-top:10px;max-height:420px;overflow:auto;font-size:13px;padding:10px 12px;
+  background:#FAFAFE;border:1px solid var(--linea);border-radius:9px}
 
 /* firmas */
 .fb{margin-bottom:15px;overflow:hidden}
@@ -1160,6 +1167,14 @@ function tarjetaMonitoreo(f, firmable){
 
   if(d.resumen) c.appendChild(el('div','mon-sec', `<h5>Resumen de la llamada</h5><p>${esc(d.resumen)}</p>`));
   if(d.recomendacion) c.appendChild(el('div','mon-sec', `<h5>Recomendaciones</h5><p>${esc(d.recomendacion)}</p>`));
+  // Transcripción completa (monitoreos desde sept. 2026). Plegada: puede pasar
+  // de 100 líneas y taparía la firma.
+  if(d.transcripcion){
+    const lineas = String(d.transcripcion).split('\n').length;
+    c.appendChild(el('div','mon-sec',
+      `<details class="mon-trans"><summary><h5>Observaciones de la llamada · transcripción</h5>
+         <span>${lineas} líneas · ver</span></summary><p>${esc(d.transcripcion)}</p></details>`));
+  }
 
   c.appendChild(construirZonaFirma(f, firmable));
   return c;
