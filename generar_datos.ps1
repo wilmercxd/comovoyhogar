@@ -233,6 +233,7 @@ $COLS = @{
   ot      = @('N°OT','NOT','N OT')
   campana = @('CAMPAÑA')
   tel     = @('TEL1')
+  sup     = @('SUPERVISOR')
   # Cargo fijo mensual del servicio vendido: el CFM con que se valora la
   # facturación que representa el tiempo perdido (pestaña Auxiliares).
   cfm     = @('VALOR SERV FINAL')
@@ -265,6 +266,7 @@ $ventas       = @{}
 $sinFecha     = 0
 $congeladas   = 0
 $fueraCampana = 0
+$ojtAjenas    = @{}     # ventas de la campaña OJT de asesores que no son del roster
 
 foreach ($f in ($archivos | Sort-Object @{ Expression = { Fecha-Archivo $_ } })) {
   $fArchivo = Fecha-Archivo $f
@@ -284,7 +286,21 @@ foreach ($f in ($archivos | Sort-Object @{ Expression = { Fecha-Archivo $_ } }))
   $tomadas = 0
   foreach ($r in $filas) {
     $cc = "$(Get-Col $r $COLS.cc)".Trim()
-    if (-not $porCC.ContainsKey($cc)) { continue }          # asesor de otro equipo
+    if (-not $porCC.ContainsKey($cc)) {                      # asesor de otro equipo
+      # ...salvo las ventas de la campaña OJT: esas cuentan TODAS para el
+      # total OJT de la campaña, sea cual sea el supervisor (regla de Wilmer).
+      $campO = "$(Get-Col $r $COLS.campana)".Trim().ToUpperInvariant()
+      $faO   = Get-Fecha (Get-Col $r $COLS.agenda)
+      if ($campO -match '^HOGAR.*OJT' -and $faO) {
+        $otO = "$(Get-Col $r $COLS.ot)".Trim()
+        $kO  = if ($otO -and $otO -ne '0') { "OT$otO" } else { "X$cc|$($faO.ToString('yyyyMMdd'))|$("$(Get-Col $r $COLS.cliCC)".Trim())" }
+        $ojtAjenas[$kO] = [pscustomobject]@{
+          cc = $cc; nombre = ("$(Get-Col $r $COLS.asesor)" -replace '\s+',' ').Trim()
+          estado = "$(Get-Col $r $COLS.estado)".Trim().ToUpperInvariant(); agenda = $faO
+          sup = ("$(Get-Col $r $COLS.sup)" -replace '\s+',' ').Trim() }
+      }
+      continue
+    }
 
     $fa = Get-Fecha (Get-Col $r $COLS.agenda)
     if (-not $fa) { $sinFecha++; continue }
@@ -900,6 +916,44 @@ try {
   $auxiliares = [ordered]@{}; $auxMeta = $null
 }
 
+# ====================================================================== OJT
+# Ventas OJT de la campaña (regla de Wilmer, 30/09/2026): cuentan
+#   (a) TODAS las de la campaña HOGAR_OJT, de cualquier supervisor, y
+#   (b) las del personal recién ingresado hasta ANTES de su fecha de ingreso
+#       (que es la misma de su contratación).
+# Se arma como un bloque aparte por mes; no toca las cifras personales.
+$ojtItems = @{}
+foreach ($k in $ojtAjenas.Keys) {
+  $o = $ojtAjenas[$k]
+  $ojtItems[$k] = [pscustomobject]@{ cc=$o.cc; nombre=$o.nombre; estado=$o.estado; agenda=$o.agenda; origen='Campaña OJT' }
+}
+foreach ($v in $todas) {
+  $a = $porCC[$v.cc]
+  $ing = if ($a.ingreso) { Get-Fecha $a.ingreso } else { $null }
+  $esOjtCamp = ($v.campana -match 'OJT')
+  $previa    = ($ing -and $v.agenda -lt $ing)
+  if (-not ($esOjtCamp -or $previa)) { continue }
+  $kk = if ($v.ot -and $v.ot -ne '0') { "OT$($v.ot)" } else { "X$($v.cc)|$($v.agenda.ToString('yyyyMMdd'))|$($v.cliCC)" }
+  $ojtItems[$kk] = [pscustomobject]@{ cc=$v.cc; nombre=$a.nombre.Trim(); estado=$v.estado; agenda=$v.agenda
+    origen = $(if ($previa) { 'Antes de su ingreso' } else { 'Campaña OJT' }) }
+}
+$ojtJson = [ordered]@{}
+foreach ($mk in $clavesMes) {
+  $del = @($ojtItems.Values | Where-Object {
+    $m = $_.agenda.ToString('yyyy-MM'); if ($m -gt $mkCorte) { $m = $mkCorte }; $m -eq $mk })
+  $pers = @($del | Group-Object cc | ForEach-Object {
+    $g = @($_.Group)
+    [ordered]@{ cc=$_.Name; nombre=$g[0].nombre
+      origen = (@($g | ForEach-Object { $_.origen } | Sort-Object -Unique) -join ' + ')
+      ventas = $g.Count; inst = @($g | Where-Object { $_.estado -eq 'INSTALADO' }).Count }
+  } | Sort-Object { -$_.inst }, { -$_.ventas })
+  $ojtJson[$mk] = [ordered]@{
+    ventas = $del.Count
+    inst   = @($del | Where-Object { $_.estado -eq 'INSTALADO' }).Count
+    personas = $pers }
+  Ok ("OJT {0}: {1} ventas, {2} instaladas, {3} personas" -f $mk, $ojtJson[$mk].ventas, $ojtJson[$mk].inst, $pers.Count)
+}
+
 # ==================================================================== SALIDA
 # El esquema va indexado por mes: en agosto cambia para todos, y el portal
 # tiene que poder mostrar julio con las reglas con las que julio se cerro.
@@ -934,6 +988,7 @@ $doc = [ordered]@{
   esquema  = $esqJson
   meses    = $mesesJson
   agentes  = $agentesJson
+  ojt      = $ojtJson
   # Tiempos del día por asesor (Power BI de tiempos). Vacío si no respondió.
   aux      = $auxiliares
   auxMeta  = $auxMeta

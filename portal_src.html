@@ -1947,6 +1947,36 @@ function vEquipo(v){
     s2.appendChild(b2);
   }
   v.appendChild(s2);
+
+  /* ------------------------------------------------ ventas OJT del mes */
+  // Cuentan para la campaña: todas las de la campaña HOGAR_OJT (de cualquier
+  // supervisor) y las del personal recién ingresado hasta antes de su fecha
+  // de ingreso (= la de contratación). Bloque aparte: no altera las cifras
+  // personales de arriba.
+  const oj = D.ojt && D.ojt[mk];
+  if(oj && oj.ventas){
+    const s3 = el('section','sec');
+    s3.appendChild(el('h3',null,`Ventas OJT · ${esc(mes.nombre)}`));
+    const g3 = el('div','kpis');
+    g3.appendChild(kpi('Ventas OJT', String(oj.ventas), `${oj.personas.length} personas`));
+    g3.appendChild(kpi('Instaladas OJT', String(oj.inst), 'Por fecha agenda'));
+    s3.appendChild(g3);
+    const t3 = el('table','tbl'); t3.style.marginTop = '13px';
+    t3.innerHTML = `<thead><tr><th>Persona</th><th>Por qué cuenta</th><th class="n">Ventas</th><th class="n">Instaladas</th></tr></thead>`;
+    const b3 = el('tbody');
+    oj.personas.forEach(p => {
+      const tr = el('tr');
+      tr.innerHTML = `<td class="destaca">${esc(p.nombre)}</td><td style="color:var(--tx3)">${esc(p.origen)}</td>
+        <td class="n">${p.ventas}</td><td class="n"><b>${p.inst}</b></td>`;
+      b3.appendChild(tr);
+    });
+    t3.appendChild(b3);
+    const e3 = el('div','card envolt'); e3.appendChild(t3); s3.appendChild(e3);
+    s3.appendChild(el('div','nota',
+      `Incluye todas las ventas de la campaña OJT y las de quien acaba de ingresar, hasta antes de su fecha de ingreso
+       (la misma de su contratación).`));
+    v.appendChild(s3);
+  }
 }
 
 function exportarCSV(filas, cols, nombre){
