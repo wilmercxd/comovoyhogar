@@ -125,6 +125,19 @@ main{max-width:1240px;margin:0 auto;padding:24px 22px 70px}
 .card{background:var(--papel);border:1px solid var(--linea);border-radius:var(--r);box-shadow:var(--sombra)}
 .card.p{padding:18px}
 
+
+/* auxiliares */
+.callout.g{border-left-color:var(--ok)} .callout.a{border-left-color:var(--am)} .callout.r{border-left-color:var(--mal)}
+main.ancho{max-width:none;padding-left:16px;padding-right:16px}
+.tbl.aux{font-size:12px}
+.tbl.aux th,.tbl.aux td{padding:7px 4px;white-space:nowrap}
+.tbl.aux th small{white-space:normal;display:block;max-width:96px;margin-left:auto;line-height:1.25}
+.pill.nuevo{background:#E5007D;color:#fff;animation:latir 1.1s ease-in-out infinite}
+@keyframes latir{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(229,0,125,.55)}50%{transform:scale(1.12);box-shadow:0 0 0 7px rgba(229,0,125,0)}}
+.aviso-aux{border:2px solid #E5007D;background:#FFF0F7;border-radius:12px;padding:13px 16px;margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;animation:latirBorde 1.6s ease-in-out infinite}
+.aviso-aux button{background:#E5007D;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer}
+@keyframes latirBorde{0%,100%{box-shadow:0 0 0 0 rgba(229,0,125,.35)}50%{box-shadow:0 0 0 9px rgba(229,0,125,0)}}
+
 /* selector de mes */
 .meses{display:flex;gap:8px;margin-bottom:22px;flex-wrap:wrap}
 .mesbtn{
@@ -586,10 +599,12 @@ const misReconocimientos = () => S.reconocimientos.filter(r => r.cc_asesor === S
 function pintarTabs(){
   const t = $('#tabs'); t.innerHTML = '';
   const defs = S.rol === 'SUPERVISOR'
-    ? [['equipo','Mi equipo'],['firmas','Firmas del equipo'],['notas','Consolidado de notas']]
-    : [['desempeno','Mi desempeño'],['fb','Retroalimentación'],['metas','Mis metas']];
+    ? [['equipo','Mi equipo'],['auxsup','Auxiliares del equipo'],['firmas','Firmas del equipo'],['notas','Consolidado de notas']]
+    : [['desempeno','Mi desempeño'],['auxiliares','Auxiliares'],['fb','Retroalimentación'],['metas','Mis metas']];
   defs.forEach(([k,txt]) => {
     const b = el('button','tab'+(S.tab===k?' on':''), esc(txt));
+    // Pestaña nueva: late con un «NUEVO» hasta que el asesor entre a verla.
+    if(k==='auxiliares' && !auxVisto()) b.appendChild(el('span','pill nuevo','NUEVO'));
     if(k==='fb'){ const n = pendientesFirma(); if(n) b.appendChild(el('span','pill',String(n))); }
     if(k==='firmas'){
       const n = S.feedback.filter(f => !firmaDe(f.id)).length;
@@ -601,9 +616,295 @@ function pintarTabs(){
 }
 function pintar(){
   const v = $('#vista'); v.innerHTML = '';
+  v.classList.toggle('ancho', S.tab === 'auxiliares' || S.tab === 'auxsup');
+  // Aviso de la pestaña nueva de Auxiliares: late hasta que el asesor entre.
+  if(S.rol !== 'SUPERVISOR' && S.tab !== 'auxiliares' && auxDe(S.cc) && !auxVisto()){
+    const av = el('div','aviso-aux',
+      `<div style="flex:1 1 280px;font-size:14px"><b style="color:#E5007D">NUEVO · Auxiliares.</b> Ya puedes ver cuánto tiempo
+       se te va en pausas cada día y semana, y cuántas instaladas representa. Revísalo.</div>`);
+    const bt = el('button',null,'Ver mis auxiliares'); bt.onclick = () => irA('auxiliares');
+    av.appendChild(bt); v.appendChild(av);
+  }
   ({ desempeno:vDesempeno, fb:vFeedback, metas:vMetas,
-     equipo:vEquipo, firmas:vFirmas, notas:vNotas })[S.tab](v);
+     equipo:vEquipo, firmas:vFirmas, notas:vNotas,
+     auxiliares:vAuxiliares, auxsup:vAuxSup })[S.tab](v);
 }
+
+/* ===================================================================== */
+/*  Auxiliares: el tiempo del día que no se fue en vender                */
+/*                                                                       */
+/*  Sale del Power BI "Informe de Tiempos CXD". Reglas del turno: 6 h,   */
+/*  20 min de break, 5 min de baño. Lo que pase de eso, más la Pausa,    */
+/*  la Pausa Call Out y la Pausa Working, es tiempo perdido. Coaching,   */
+/*  ACW e incidente técnico se muestran pero NO cuentan: los manda la    */
+/*  operación o son parte del trabajo de la llamada.                     */
+/*                                                                       */
+/*  El tiempo perdido se traduce a ventas con el ritmo PROPIO del        */
+/*  asesor (sus instaladas del mes / sus horas en llamada + disponible):     */
+/*  así el número es suyo, no un promedio que no le habla a nadie.       */
+/* ===================================================================== */
+// Siempre "X h Y min", nunca "5:16": con dos puntos se lee como minutos y
+// segundos y el asesor cree que perdió 5 minutos cuando fueron 5 horas.
+// Límites para marcar en rojo, los mismos del formato condicional del
+// Informe de Tiempos CXD (Power BI): break > 20, baño > 5, call out > 30,
+// ACW > 35, ocupación < 60 %. Pausa Working y Coaching no se marcan allá.
+const dec  = n => Number(n||0).toFixed(1).replace('.',',');
+const mill = n => '$' + (Math.round((n||0)/100000)/10).toFixed(1).replace('.',',') + 'M';
+function irA(tab){ S.tab = tab; pintarTabs(); pintar(); window.scrollTo(0,0); }
+const LIM = { pco:30, acw:35, ocu:60, adh:90 };
+const hm = min => { const t = Math.round(min || 0), h = Math.floor(t/60), m = t % 60;
+  return h ? (m ? `${h} h ${m} min` : `${h} h`) : `${m} min`; };
+// Lunes de la semana (semanas de lunes a sábado; el domingo cae en la suya).
+function lunesDe(iso){ const d = new Date(iso + 'T12:00:00'); const w = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - w); return d.toISOString().slice(0,10); }
+function semanasAux(dias, ritmo){
+  const g = {};
+  dias.forEach(d => { const k = lunesDe(d.f); (g[k] = g[k] || []).push(d); });
+  return Object.keys(g).sort().map(k => {
+    const L = g[k], perd = L.reduce((s,d) => s + d.perd, 0);
+    const sab = new Date(k + 'T12:00:00'); sab.setDate(sab.getDate() + 5);
+    return { ini:k, fin:sab.toISOString().slice(0,10), dias:L.length, perd,
+             pau:L.reduce((s,d) => s + d.pau, 0), perdDia: perd / L.length,
+             v: Math.round(perd / 60 * ritmo * 10) / 10 };
+  });
+}
+function avisoHoras(v){
+  v.appendChild(el('div','callout',
+    '<b>Todos los tiempos de esta pestaña están en HORAS y MINUTOS</b> (por ejemplo «5 h 16 min»), no en minutos y segundos.'));
+}
+// Total de pausas del día, igual a «C1 Pausas Permitidas» del Power BI.
+const c1De = d => (d.brk||0)+(d.ban||0)+(d.pau||0)+(d.pco||0)+(d.pw||0)+(d.coa||0)+(d.acw||0)+(d.inc||0);
+const auxDe = cc => (D.aux && D.aux[cc]) || null;
+const auxVisto = () => { try { return localStorage.getItem('auxVisto_' + S.cc) === '1'; } catch(e){ return false; } };
+const marcarAuxVisto = () => { try { localStorage.setItem('auxVisto_' + S.cc, '1'); } catch(e){} };
+
+function mesesAux(){
+  const s = new Set();
+  Object.values(D.aux || {}).forEach(a => Object.keys(a.meses).forEach(k => s.add(k)));
+  return [...s].sort();
+}
+function selectorMesAux(v, meses){
+  if(meses.indexOf(S.mesAux) < 0) S.mesAux = meses[meses.length-1];
+  const c = el('div','meses');
+  meses.forEach(mk => {
+    const nom = (D.meses[mk] && D.meses[mk].nombre) || mk;
+    const b = el('button','mesbtn'+(S.mesAux===mk?' on':''), esc(nom));
+    b.onclick = () => { S.mesAux = mk; pintar(); };
+    c.appendChild(b);
+  });
+  v.appendChild(c);
+}
+function sinAux(v){
+  v.appendChild(el('div','card p vacio',
+    'Todavía no hay tiempos cargados. Salen del Informe de Tiempos de Power BI; cuando la próxima actualización lo alcance a leer, aparecen aquí.'));
+}
+
+function vAuxiliares(v){
+  const meses = mesesAux();
+  const a = auxDe(S.cc);
+  if(!auxVisto()){ marcarAuxVisto(); pintarTabs(); }
+  if(!meses.length || !a){ sinAux(v); return; }
+  selectorMesAux(v, meses);
+  avisoHoras(v);
+  const mk = S.mesAux, M = a.meses[mk];
+  if(!M){ v.appendChild(el('div','card p vacio','No hay tiempos tuyos registrados en este mes.')); return; }
+  const R = D.auxMeta;
+
+  const g = el('div','kpis');
+  g.appendChild(kpi('Tiempo perdido', hm(M.perd), `En ${M.dias} días conectados`));
+  g.appendChild(kpi('Por día', hm(M.perdDia), `Fuera de los ${R.brk} min de break y ${R.ban} de baño`));
+  g.appendChild(kpi('Instaladas que representa', un1(M.vPerd), `Con tu ritmo de ${dec(M.ritmo)} instaladas por hora`));
+  g.appendChild(kpi('Facturación que representa', pes(M.cfmPerd), 'Al plan promedio de tus instaladas'));
+  g.appendChild(kpi('Ocupación', dec(M.ocu) + '<small>%</small>', 'Promedio de tus días · Power BI'));
+  g.appendChild(kpi('Adherencia', dec(M.adh) + '<small>%</small>', 'Promedio de tus días · Power BI'));
+  v.appendChild(g);
+
+  // El mensaje en una línea: cuánto, en qué, y qué vale.
+  const partes = [['Pausa sin motivo', M.pau], ['Exceso de break', M.exBrk], ['Exceso de baño', M.exBan],
+                  ['Pausa Call Out', M.pco], ['Pausa Working', M.pw]].filter(x => x[1] > 0).sort((x,y) => y[1]-x[1]);
+  if(M.perd >= 1 && partes.length){
+    v.appendChild(el('div','callout a',
+      `<b>Pierdes en promedio ${hm(M.perdDia)} por día</b>, y la mayor parte se va en <b>${esc(partes[0][0])}</b>
+       (${hm(partes[0][1])} en el mes). Con tu ritmo, ese tiempo equivale a <b>${un1(M.vPerd)} instaladas</b>
+       que no entraron. Recuperar la mitad ya son ${un1(M.vPerd/2)} instaladas más este mes.`));
+  }else{
+    v.appendChild(el('div','callout g',
+      '<b>Este mes no tienes tiempo perdido en auxiliares.</b> Break y baño dentro de lo permitido y sin pausas extra. Así se hace.'));
+  }
+
+  /* ---- en qué se va el tiempo */
+  const s1 = el('section','sec');
+  s1.appendChild(el('h3',null,'En qué se va el tiempo'));
+  const c1 = el('div','card p');
+  const max = Math.max(1, ...partes.map(x => x[1]));
+  (partes.length ? partes : [['Sin tiempo perdido', 0]]).forEach(([n,val]) => {
+    const f = el('div'); f.style.cssText = 'margin:8px 0';
+    f.innerHTML = `<div style="display:flex;justify-content:space-between;font-size:13.5px">
+        <span>${esc(n)}</span><b>${hm(val)}</b></div>
+      <div style="height:8px;background:var(--linea);border-radius:5px;margin-top:4px;overflow:hidden">
+        <div style="height:100%;width:${Math.round(100*val/max)}%;background:var(--am)"></div></div>`;
+    c1.appendChild(f);
+  });
+  s1.appendChild(c1);
+  s1.appendChild(el('div','nota',
+    `Cuenta como tiempo perdido lo que pase de <b>${R.brk} min de break</b> y <b>${R.ban} min de baño</b> por día,
+     más toda la <b>Pausa sin motivo</b> (la «Pausa» genérica del marcador: no es columna en la tabla del Power BI, está dentro de «C1 Pausas Permitidas» y en la dona de pausas), la Pausa Call Out y la Pausa Working. <b>No cuentan</b> el coaching, el ACW ni los
+     incidentes técnicos: esos los manda la operación o son parte del trabajo de la llamada.`));
+  v.appendChild(s1);
+
+  /* ---- semana a semana (lunes a sábado) */
+  const diasMes = a.dias.filter(d => d.f.slice(0,7) === mk);
+  const sem = semanasAux(diasMes, M.ritmo);
+  const sS = el('section','sec');
+  sS.appendChild(el('h3',null,'Semana a semana · lunes a sábado'));
+  const tS = el('table','tbl aux');
+  tS.innerHTML = `<thead><tr><th>Semana</th><th class="n">Días</th><th class="n">Tiempo perdido<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(sin motivo + excesos + call out + working)</small></th>
+    <th class="n">Por día</th><th class="n">De eso, pausa sin motivo</th><th class="n">Instaladas que representa</th></tr></thead>`;
+  const bS = el('tbody');
+  sem.forEach((w,i) => {
+    const ant = sem[i-1], tend = ant ? (w.perdDia < ant.perdDia - 1 ? ' <span style="color:var(--ok)">▼ mejoró</span>'
+                                       : w.perdDia > ant.perdDia + 1 ? ' <span style="color:var(--mal)">▲ empeoró</span>' : '') : '';
+    const tr = el('tr');
+    tr.innerHTML = `<td>${fechaCorta(w.ini)} – ${fechaCorta(w.fin)}</td><td class="n">${w.dias}</td>
+      <td class="n"><b>${hm(w.perd)}</b></td><td class="n">${hm(w.perdDia)}${tend}</td>
+      <td class="n">${hm(w.pau)}</td><td class="n"><b>${un1(w.v)}</b></td>`;
+    bS.appendChild(tr);
+  });
+  tS.appendChild(bS);
+  const tfS = el('tfoot');
+  tfS.innerHTML = `<tr style="background:#FAFAFE;font-weight:700;border-top:2px solid var(--linea)">
+    <td>Total al corte</td><td class="n">${M.dias}</td><td class="n">${hm(M.perd)}</td><td class="n">${hm(M.perdDia)}</td>
+    <td class="n">${hm(M.pau)}</td><td class="n">${un1(M.vPerd)}</td></tr>`;
+  tS.appendChild(tfS);
+  const eS = el('div','card envolt'); eS.appendChild(tS); sS.appendChild(eS);
+  v.appendChild(sS);
+
+  /* ---- día a día */
+  const s2 = el('section','sec');
+  s2.appendChild(el('h3',null,'Día a día'));
+  const t = el('table','tbl aux');
+  t.innerHTML = `<thead><tr><th>Día</th><th class="n">Inicio<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(primer ingreso del día)</small></th><th class="n">Salida<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(hora militar)</small></th><th class="n">Conexión<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(total logueado · turno 6 h)</small></th><th class="n">Break<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(permitido 20 min)</small></th><th class="n">Baño<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(permitido 5 min)</small></th>
+    <th class="n">Pausa sin motivo<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(«Pausa» genérica, sin elegir motivo)</small></th><th class="n">Call Out<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(Pausa Call Out · rojo si pasa de 30 min)</small></th><th class="n">Working<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(Pausa Working)</small></th><th class="n">Coaching<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(no cuenta como perdido)</small></th>
+    <th class="n">ACW<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(post-llamada · no cuenta · rojo si pasa de 35 min)</small></th><th class="n" title="Suma de todas las pausas, igual a la columna C1 Pausas Permitidas del Power BI">Total pausas<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(C1 del Power BI: todas las pausas)</small></th>
+    <th class="n">Perdido<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(sin motivo + exceso break + exceso baño + call out + working)</small></th><th class="n">Instaladas equiv.<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(perdido × tu ritmo de instaladas por hora)</small></th><th class="n">Ocupación<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(tiempo en llamada vs. conectado · rojo bajo 60 %)</small></th><th class="n">Adherencia<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(cumplimiento del turno · rojo bajo 90 %)</small></th></tr></thead>`;
+  const tb = el('tbody');
+  const rojo = 'color:var(--mal);font-weight:700';
+  a.dias.filter(d => d.f.slice(0,7) === mk).slice().reverse().forEach(d => {
+    const tr = el('tr');
+    tr.innerHTML = `<td>${fechaCorta(d.f)}</td>
+      <td class="n">${esc(d.ini || '—')}</td><td class="n">${esc(d.fin || '—')}</td>
+      <td class="n" style="${d.con < R.turno - 15 ? rojo : ''}">${hm(d.con)}</td>
+      <td class="n" style="${Math.round(d.brk) > R.brk ? rojo : ''}">${hm(d.brk)}</td>
+      <td class="n" style="${Math.round(d.ban) > R.ban ? rojo : ''}">${hm(d.ban)}</td>
+      <td class="n" style="${Math.round(d.pau) > 0 ? rojo : ''}">${hm(d.pau)}</td>
+      <td class="n" style="${Math.round(d.pco) > LIM.pco ? rojo : ''}">${hm(d.pco)}</td>
+      <td class="n">${hm(d.pw)}</td>
+      <td class="n" style="color:var(--tx3)">${hm(d.coa)}</td>
+      <td class="n" style="${Math.round(d.acw) > LIM.acw ? rojo : 'color:var(--tx3)'}">${hm(d.acw)}</td>
+      <td class="n">${hm(c1De(d))}</td>
+      <td class="n"><b>${hm(d.perd)}</b></td>
+      <td class="n">${un1(Math.round(d.perd / 60 * M.ritmo * 10) / 10)}</td>
+      <td class="n" style="${d.ocu != null && d.ocu < LIM.ocu ? rojo : ''}">${d.ocu != null ? dec(d.ocu) + ' %' : '—'}</td>
+      <td class="n" style="${d.adh != null && d.adh < LIM.adh ? rojo : ''}">${d.adh != null ? dec(d.adh) + ' %' : '—'}</td>`;
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  // Total acumulado del mes al corte, al pie de la tabla.
+  const sm = k => diasMes.reduce((s,d) => s + (d[k] || 0), 0);
+  const tf = el('tfoot');
+  tf.innerHTML = `<tr style="background:#FAFAFE;font-weight:700;border-top:2px solid var(--linea)">
+    <td>Total al corte · ${diasMes.length} días</td><td></td><td></td><td class="n">${hm(sm('con'))}</td><td class="n">${hm(sm('brk'))}</td>
+    <td class="n">${hm(sm('ban'))}</td><td class="n">${hm(sm('pau'))}</td><td class="n">${hm(sm('pco'))}</td>
+    <td class="n">${hm(sm('pw'))}</td><td class="n">${hm(sm('coa'))}</td><td class="n">${hm(sm('acw'))}</td>
+    <td class="n">${hm(diasMes.reduce((s,d) => s + c1De(d), 0))}</td><td class="n">${hm(sm('perd'))}</td>
+    <td class="n">${un1(M.vPerd)}</td><td class="n">${dec(M.ocu)} %</td><td class="n">${dec(M.adh)} %</td></tr>`;
+  t.appendChild(tf);
+  const en = el('div','card envolt'); en.appendChild(t); s2.appendChild(en);
+  s2.appendChild(el('div','nota',
+    `Tiempos en horas y minutos; inicio y salida en hora militar (19:24 = 7:24 p. m.). En rojo lo que pasa del límite. La conexión sale en rojo si faltan más de 15 minutos
+     para el turno de ${hm(R.turno)}. Fuente: Informe de Tiempos CXD (Power BI), del ${fechaCorta(R.desde)} al ${fechaCorta(R.hasta)}.`));
+  v.appendChild(s2);
+}
+
+function vAuxSup(v){
+  const meses = mesesAux();
+  if(!meses.length){ sinAux(v); return; }
+  selectorMesAux(v, meses);
+  avisoHoras(v);
+  const mk = S.mesAux;
+  const filas = D.agentes.map(a => ({a, M: (auxDe(a.cc) || {meses:{}}).meses[mk]})).filter(x => x.M)
+                 .sort((x,y) => y.M.vPerd - x.M.vPerd);
+  if(!filas.length){ v.appendChild(el('div','card p vacio','No hay tiempos del equipo en este mes.')); return; }
+  const tot = filas.reduce((s,x) => ({perd:s.perd+x.M.perd, v:s.v+x.M.vPerd, cfm:s.cfm+x.M.cfmPerd}), {perd:0,v:0,cfm:0});
+
+  const g = el('div','kpis');
+  g.appendChild(kpi('Tiempo perdido del equipo', hm(tot.perd), `${filas.length} asesores con tiempos`));
+  g.appendChild(kpi('Instaladas que representa', un1(Math.round(tot.v)), 'Cada uno a su propio ritmo'));
+  g.appendChild(kpi('Facturación que representa', mill(tot.cfm), 'Al plan promedio de cada asesor'));
+  v.appendChild(g);
+
+  // Semana a semana del equipo: cada asesor a su ritmo, sumados.
+  const semEq = {};
+  filas.forEach(({a,M}) => semanasAux(auxDe(a.cc).dias.filter(d => d.f.slice(0,7) === mk), M.ritmo).forEach(w => {
+    const e = semEq[w.ini] = semEq[w.ini] || {ini:w.ini, fin:w.fin, perd:0, v:0, ases:0};
+    e.perd += w.perd; e.v += w.v; e.ases++;
+  }));
+  const sW = el('section','sec');
+  sW.appendChild(el('h3',null,'Semana a semana del equipo · lunes a sábado'));
+  const tW = el('table','tbl aux');
+  tW.innerHTML = `<thead><tr><th>Semana</th><th class="n">Asesores</th><th class="n">Tiempo perdido<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(sin motivo + excesos + call out + working)</small></th>
+    <th class="n">Por asesor</th><th class="n">Instaladas que representa</th></tr></thead>`;
+  const bW = el('tbody');
+  Object.values(semEq).sort((x,y) => x.ini < y.ini ? -1 : 1).forEach(w => {
+    const tr = el('tr');
+    tr.innerHTML = `<td>${fechaCorta(w.ini)} – ${fechaCorta(w.fin)}</td><td class="n">${w.ases}</td>
+      <td class="n"><b>${hm(w.perd)}</b></td><td class="n">${hm(w.perd / w.ases)}</td><td class="n"><b>${un1(Math.round(w.v))}</b></td>`;
+    bW.appendChild(tr);
+  });
+  tW.appendChild(bW);
+  const tfW = el('tfoot');
+  tfW.innerHTML = `<tr style="background:#FAFAFE;font-weight:700;border-top:2px solid var(--linea)">
+    <td>Total al corte</td><td class="n">${filas.length}</td><td class="n">${hm(tot.perd)}</td>
+    <td class="n">${hm(tot.perd / filas.length)}</td><td class="n">${un1(Math.round(tot.v))}</td></tr>`;
+  tW.appendChild(tfW);
+  const eW = el('div','card envolt'); eW.appendChild(tW); sW.appendChild(eW);
+  v.appendChild(sW);
+
+  const s = el('section','sec');
+  s.appendChild(el('h3',null,'Por asesor · de más a menos instaladas perdidas'));
+  const t = el('table','tbl aux');
+  t.innerHTML = `<thead><tr><th>Asesor</th><th class="n">Días</th><th class="n">Perdido<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(sin motivo + exceso break + exceso baño + call out + working)</small></th><th class="n">Por día</th>
+    <th class="n">Pausa sin motivo<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(«Pausa» genérica, sin elegir motivo)</small></th><th class="n">Exc. break<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(lo que pasa de 20 min)</small></th><th class="n">Exc. baño<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(lo que pasa de 5 min)</small></th><th class="n">Call Out + Working<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(pausas de esos dos tipos)</small></th>
+    <th class="n">Ritmo v/h<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(instaladas por hora en llamada + disponible)</small></th><th class="n">Instaladas perdidas<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(horas perdidas × ritmo)</small></th><th class="n">Ocupación<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(tiempo en llamada vs. conectado · rojo bajo 60 %)</small></th><th class="n">Adherencia<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(cumplimiento del turno · rojo bajo 90 %)</small></th></tr></thead>`;
+  const tb = el('tbody');
+  filas.forEach(({a,M}) => {
+    const tr = el('tr');
+    tr.innerHTML = `<td>${esc(a.nombre)}</td><td class="n">${M.dias}</td><td class="n"><b>${hm(M.perd)}</b></td>
+      <td class="n">${hm(M.perdDia)}</td><td class="n">${hm(M.pau)}</td><td class="n">${hm(M.exBrk)}</td>
+      <td class="n">${hm(M.exBan)}</td><td class="n">${hm(M.pco + M.pw)}</td><td class="n">${dec(M.ritmo)}</td>
+      <td class="n"><b>${un1(M.vPerd)}</b></td><td class="n">${dec(M.ocu)} %</td>
+      <td class="n" style="${M.adh < 90 ? 'color:var(--mal);font-weight:700' : ''}">${dec(M.adh)} %</td>`;
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  const sq = k => filas.reduce((s,x) => s + (x.M[k] || 0), 0);
+  const tfq = el('tfoot');
+  tfq.innerHTML = `<tr style="background:#FAFAFE;font-weight:700;border-top:2px solid var(--linea)">
+    <td>Total al corte</td><td class="n">${sq('dias')}</td><td class="n">${hm(tot.perd)}</td>
+    <td class="n">${hm(tot.perd / Math.max(1, sq('dias')))}</td><td class="n">${hm(sq('pau'))}</td><td class="n">${hm(sq('exBrk'))}</td>
+    <td class="n">${hm(sq('exBan'))}</td><td class="n">${hm(sq('pco') + sq('pw'))}</td><td class="n">—</td>
+    <td class="n">${un1(Math.round(tot.v))}</td>
+    <td class="n">${dec(filas.reduce((s,x) => s + x.M.ocu, 0) / filas.length)} %</td>
+    <td class="n">${dec(filas.reduce((s,x) => s + x.M.adh, 0) / filas.length)} %</td></tr>`;
+  t.appendChild(tfq);
+  const en = el('div','card envolt'); en.appendChild(t); s.appendChild(en);
+  s.appendChild(el('div','nota',
+    `Tiempo perdido = exceso sobre ${D.auxMeta.brk} min de break y ${D.auxMeta.ban} min de baño por día, más Pausa sin motivo,
+     Pausa Call Out y Pausa Working. Coaching, ACW e incidentes técnicos no cuentan. Instaladas perdidas = horas perdidas ×
+     ritmo propio del asesor en el mes.`));
+  v.appendChild(s);
+}
+
 
 /* ===================================================================== */
 /*  Selector de mes                                                      */

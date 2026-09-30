@@ -233,6 +233,9 @@ $COLS = @{
   ot      = @('N°OT','NOT','N OT')
   campana = @('CAMPAÑA')
   tel     = @('TEL1')
+  # Cargo fijo mensual del servicio vendido: el CFM con que se valora la
+  # facturación que representa el tiempo perdido (pestaña Auxiliares).
+  cfm     = @('VALOR SERV FINAL')
 }
 
 # Una OT puede venir en dos cortes distintos: gana la del archivo mas reciente.
@@ -345,6 +348,7 @@ foreach ($f in ($archivos | Sort-Object @{ Expression = { Fecha-Archivo $_ } }))
       ot      = $ot
       campana = "$(Get-Col $r $COLS.campana)".Trim()
       tel     = "$(Get-Col $r $COLS.tel)".Trim()
+      cfm     = $( $x = 0.0; [void][double]::TryParse(("$(Get-Col $r $COLS.cfm)" -replace '[^\d.]',''), [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$x); $x )
     }
     $tomadas++
   }
@@ -697,6 +701,205 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
   Ok ("{0,-34} {1,3} inst  {2,3}% dig  {3,3} OTT" -f $a.nombre, $(if($u){$u.inst}else{0}), $(if($u){$u.digPct}else{0}), $(if($u){$u.ott}else{0}))
 }
 
+# ==========================================================================
+#  AUXILIARES  (tiempos del día, desde el Power BI "Informe de Tiempos CXD")
+#
+#  Se consulta el reporte publicado en la web con la misma API que usa el
+#  visor. Si el Power BI no responde, el portal sale igual, sin la pestaña de
+#  auxiliares: los tiempos nunca pueden tumbar la publicación de las ventas.
+#
+#  Reglas del turno (las que fija la operación):
+#     turno 6 h · break permitido 20 min · baño permitido 5 min
+#  Tiempo perdido del día = exceso de break + exceso de baño + Pausa +
+#  Pausa Call Out + Pausa Working. Coaching, ACW, incidente técnico y pausa
+#  del supervisor NO cuentan: o los manda la operación o son parte del
+#  trabajo de la llamada.
+#
+#  Ventas que eso representa: cada asesor tiene su propio ritmo (INSTALADAS
+#  del mes por FECHA AGENDA / horas productivas del mes = en llamada + disponible).
+#  Los minutos perdidos se multiplican por ESE ritmo, no por uno del equipo:
+#  a quien vende más, cada minuto perdido le cuesta más.
+# ==========================================================================
+Write-Host "`n== auxiliares ==" -ForegroundColor Cyan
+
+$AUX_TURNO = 360; $AUX_BREAK = 20; $AUX_BANO = 5
+$PBI_KEY   = 'e18997ed-2d66-4158-b6ab-54168d282057'
+$PBI_HOST  = 'https://wabi-south-central-us-c-primary-api.analysis.windows.net'
+$PBI_MED   = @('Horas_conexion_agente','Break','Baño','Pausa Call Out','Pausa Working','Coaching',
+               'ACW','Pausa','Incidente Técnico','Pausado por supervisor','Disponible','En Llamada',
+               '% Ocupación','% Adherencia','Hora_Inicio','Hora_Salida')
+
+function Pbi-Post([string]$ruta, $cuerpo, [switch]$crudo){
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  $req = [Net.HttpWebRequest]::Create($PBI_HOST + $ruta)
+  $req.AutomaticDecompression = [Net.DecompressionMethods]::GZip -bor [Net.DecompressionMethods]::Deflate
+  $req.Headers.Add('X-PowerBI-ResourceKey', $PBI_KEY)
+  $req.Timeout = 90000
+  if ($null -ne $cuerpo) {
+    $req.Method = 'POST'; $req.ContentType = 'application/json'
+    $b = [Text.Encoding]::UTF8.GetBytes(($cuerpo | ConvertTo-Json -Depth 40 -Compress))
+    $s = $req.GetRequestStream(); $s.Write($b,0,$b.Length); $s.Close()
+  }
+  $resp = $req.GetResponse()
+  $sr = [IO.StreamReader]::new($resp.GetResponseStream(), [Text.Encoding]::UTF8)
+  $txt = $sr.ReadToEnd(); $sr.Close(); $resp.Close()
+  if ($crudo) { return $txt }
+  # PowerShell 5.1 no acepta claves que solo difieren en mayúsculas
+  # ('nextRefreshTime' / 'NextRefreshTime'): se quitan antes de convertir.
+  $txt = [regex]::Replace($txt, '"NextRefreshTime"\s*:\s*("[^"]*"|null|[\d.]+)\s*,?', '')
+  return ($txt | ConvertFrom-Json)
+}
+
+$auxiliares = [ordered]@{}
+$auxMeta    = $null
+# Solo el headcount activo del mes del corte: quien se retiró antes no se consulta.
+$auxIniMes  = $fCorte.AddDays(1 - $fCorte.Day)
+$auxActivos = @($asesores | Where-Object { -not $_.retiro -or (Get-Fecha $_.retiro) -ge $auxIniMes })
+try {
+  # Del modelo solo hace falta el id: se lee con una expresión regular en vez
+  # de convertir todo el JSON, que trae claves duplicadas por mayúsculas.
+  $crudoM = Pbi-Post "/public/reports/$PBI_KEY/modelsAndExploration?preferReadOnlySession=true" $null -crudo
+  if ($crudoM -notmatch '"models"\s*:\s*\[\s*\{[^{}]*?"id"\s*:\s*(\d+)') { throw 'no se encontró el id del modelo' }
+  $modelId = [long]$Matches[1]
+
+  $sel = @(
+    [ordered]@{ Column = [ordered]@{ Expression=@{SourceRef=@{Source='p'}}; Property='documento_id' }; Name='cc' },
+    [ordered]@{ Column = [ordered]@{ Expression=@{SourceRef=@{Source='c'}}; Property='Date' };         Name='f' }
+  )
+  foreach ($m in $PBI_MED) { $sel += [ordered]@{ Measure=[ordered]@{ Expression=@{SourceRef=@{Source='m'}}; Property=$m }; Name=$m } }
+  $consulta = [ordered]@{
+    Version = 2
+    From    = @(@{Name='p';Entity='Dim_Planta_Activa';Type=0}, @{Name='c';Entity='Dim_Calendario';Type=0}, @{Name='m';Entity='Tabla_Medidas';Type=0})
+    Select  = $sel
+    Where   = @(@{ Condition = @{ In = @{
+                 Expressions = @(@{ Column = @{ Expression=@{SourceRef=@{Source='p'}}; Property='documento_id' } })
+                 Values = @($auxActivos | ForEach-Object { ,@(@{ Literal = @{ Value = "'$($_.cedula.Trim())'" } }) }) } } })
+  }
+  $cuerpo = [ordered]@{
+    version = '1.0.0'; cancelQueries = @(); modelId = $modelId
+    queries = @(@{ Query = @{ Commands = @(@{ SemanticQueryDataShapeCommand = [ordered]@{
+      Query = $consulta
+      Binding = [ordered]@{ Primary = @{ Groupings = @(@{ Projections = @(0..($sel.Count-1)) }) }
+                            DataReduction = @{ DataVolume = 4; Primary = @{ Window = @{ Count = 30000 } } }; Version = 1 }
+    } }) } })
+  }
+  $r = Pbi-Post '/public/reports/querydata?synchronous=true' $cuerpo
+
+  # --- Decodificar el formato comprimido del visor: cada fila solo trae las
+  #     celdas que cambian (R = se repite la anterior, Ø = vacía), y cada
+  #     medida con formato dinámico ocupa DOS columnas (valor + texto).
+  $data  = $r.results[0].result.data
+  $desc  = @{}; foreach ($s in $data.descriptor.Select) { $desc[$s.Value] = $s.Name }
+  $ds    = $data.dsr.DS[0]
+  $dicts = $ds.ValueDicts
+  $ph    = $ds.PH[0]
+  $filasPbi = $ph.($ph.PSObject.Properties.Name | Where-Object { $_ -like 'DM*' } | Select-Object -First 1)
+  $esq = $null; $cur = $null; $diasLeidos = 0; $fueraRango = 0
+  foreach ($row in $filasPbi) {
+    if ($row.S) { $esq = @($row.S); $cur = New-Object object[] $esq.Count }
+    $repite = if ($null -ne $row.R) { [int]$row.R } else { 0 }
+    $vacias = if ($null -ne $row.'Ø') { [int]$row.'Ø' } else { 0 }
+    $C = @($row.C); $ci = 0
+    for ($i=0; $i -lt $esq.Count; $i++) {
+      if (($repite -shr $i) -band 1) { continue }
+      if (($vacias -shr $i) -band 1) { $cur[$i] = $null; continue }
+      $cur[$i] = if ($ci -lt $C.Count) { $C[$ci] } else { $null }; $ci++
+    }
+    $o = @{}
+    for ($i=0; $i -lt $esq.Count; $i++) {
+      $nom = $desc[$esq[$i].N]; if (-not $nom) { continue }
+      $v = $cur[$i]
+      if ($esq[$i].DN -and ($v -is [int] -or $v -is [long])) { $v = $dicts.($esq[$i].DN)[[int]$v] }
+      $o[$nom] = $v
+    }
+    $cc = "$($o['cc'])"
+    if (-not $porCC.ContainsKey($cc) -or $null -eq $o['f']) { continue }
+    $fecha = ([datetime]'1970-01-01').AddMilliseconds([double]$o['f']).ToString('yyyy-MM-dd')
+    $min = @{}
+    # Hora de inicio y salida: vienen como fecha-hora de Excel ('1899-12-30T19:24:49');
+    # se deja solo HH:mm en hora militar.
+    $hIni = if ("$($o['Hora_Inicio'])" -match 'T(\d{2}:\d{2})') { $Matches[1] } else { '' }
+    $hFin = if ("$($o['Hora_Salida'])" -match 'T(\d{2}:\d{2})') { $Matches[1] } else { '' }
+    foreach ($m in $PBI_MED) {
+      if ($m -like 'Hora_*') { continue }
+      $v = $o[$m]; $x = 0.0
+      if ($null -ne $v -and "$v" -ne '') { [void][double]::TryParse("$v", [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$x) }
+      # Las de tiempo vienen en horas; las de % vienen como fracción (0,84 = 84 %).
+      $min[$m] = if ($m -like '%*') { [math]::Round($x * 100, 1) } else { [math]::Round($x * 60, 1) }
+    }
+    # Sesión que quedó abierta (se han visto días de 49 h): no se descarta
+    # el día, pero la conexión y el disponible se acotan al turno para que
+    # no inflen las horas productivas ni abaraten el minuto del asesor.
+    if ($min['Horas_conexion_agente'] -gt 720) {
+      $fueraRango++
+      $exc = $min['Horas_conexion_agente'] - $AUX_TURNO
+      $min['Horas_conexion_agente'] = $AUX_TURNO
+      $min['Disponible'] = [math]::Max(0, $min['Disponible'] - $exc)
+    }
+    $exBrk = [math]::Max(0, $min['Break'] - $AUX_BREAK)
+    $exBan = [math]::Max(0, $min['Baño']  - $AUX_BANO)
+    $perd  = $exBrk + $exBan + $min['Pausa'] + $min['Pausa Call Out'] + $min['Pausa Working']
+    $prod  = [math]::Min($AUX_TURNO, $min['En Llamada'] + $min['Disponible'])
+
+    if (-not $auxiliares.Contains($cc)) { $auxiliares[$cc] = [ordered]@{ dias = @(); meses = [ordered]@{} } }
+    $auxiliares[$cc].dias += ,([pscustomobject][ordered]@{
+      f=$fecha; con=$min['Horas_conexion_agente']; brk=$min['Break']; ban=$min['Baño']
+      pau=$min['Pausa']; pco=$min['Pausa Call Out']; pw=$min['Pausa Working']
+      coa=$min['Coaching']; acw=$min['ACW']; inc=$min['Incidente Técnico']
+      lla=$min['En Llamada']; dis=$min['Disponible']
+      ocu=$min['% Ocupación']; adh=$min['% Adherencia']; ini=$hIni; fin=$hFin
+      exBrk=[math]::Round($exBrk,1); exBan=[math]::Round($exBan,1); perd=[math]::Round($perd,1); prod=[math]::Round($prod,1)
+    })
+    $diasLeidos++
+  }
+
+  # --- Por mes: ritmo propio del asesor y ventas que representa lo perdido
+  foreach ($cc in @($auxiliares.Keys)) {
+    $dias = @($auxiliares[$cc].dias | Sort-Object { $_.f })
+    $auxiliares[$cc].dias = $dias
+    foreach ($g in ($dias | Group-Object { $_.f.Substring(0,7) })) {
+      $mk = $g.Name
+      # En Hogar la venta que cuenta es la INSTALADA, medida por FECHA AGENDA.
+      $exMes = @($ventas.Values | Where-Object { $_.cc -eq $cc -and $_.estado -eq 'INSTALADO' -and $_.agenda.ToString('yyyy-MM') -eq $mk })
+      $cfmMes = [double](($exMes | Measure-Object -Property cfm -Sum).Sum)
+      $hProd = (($g.Group | Measure-Object -Property prod -Sum).Sum) / 60
+      $perd  = ($g.Group | Measure-Object -Property perd -Sum).Sum
+      $ritmo = if ($hProd -gt 0) { $exMes.Count / $hProd } else { 0 }
+      $arpu  = if ($exMes.Count) { $cfmMes / $exMes.Count } else { 0 }
+      $vPerd = ($perd / 60) * $ritmo
+      $auxiliares[$cc].meses[$mk] = [ordered]@{
+        dias   = $g.Count
+        perd   = [math]::Round($perd,0)
+        perdDia= [math]::Round($perd / [math]::Max(1,$g.Count),1)
+        exBrk  = [math]::Round((($g.Group | Measure-Object -Property exBrk -Sum).Sum),0)
+        exBan  = [math]::Round((($g.Group | Measure-Object -Property exBan -Sum).Sum),0)
+        pau    = [math]::Round((($g.Group | Measure-Object -Property pau -Sum).Sum),0)
+        pco    = [math]::Round((($g.Group | Measure-Object -Property pco -Sum).Sum),0)
+        pw     = [math]::Round((($g.Group | Measure-Object -Property pw  -Sum).Sum),0)
+        hProd  = [math]::Round($hProd,1)
+        ex     = $exMes.Count
+        ritmo  = [math]::Round($ritmo,2)             # ventas por hora productiva
+        vPerd  = [math]::Round($vPerd,1)             # ventas que representa lo perdido
+        cfmPerd= [math]::Round($vPerd * $arpu)       # facturación que representa
+        diasExc= @($g.Group | Where-Object { $_.perd -gt 0 }).Count
+        # Promedio simple de los días del mes, tal como los calcula el Power BI cada día.
+        ocu    = [math]::Round((($g.Group | Measure-Object -Property ocu -Average).Average),1)
+        adh    = [math]::Round((($g.Group | Measure-Object -Property adh -Average).Average),1)
+      }
+    }
+  }
+  $auxMeta = [ordered]@{ turno=$AUX_TURNO; brk=$AUX_BREAK; ban=$AUX_BANO;
+                         desde=(@($auxiliares.Values | ForEach-Object { $_.dias } | ForEach-Object { $_.f } | Sort-Object))[0]
+                         hasta=(@($auxiliares.Values | ForEach-Object { $_.dias } | ForEach-Object { $_.f } | Sort-Object))[-1] }
+  Ok ("Power BI de tiempos: {0} días-asesor de {1} asesores · {2} a {3}" -f $diasLeidos, $auxiliares.Count, $auxMeta.desde, $auxMeta.hasta)
+  if ($fueraRango) { Avi "$fueraRango días con más de 12 h de conexión (sesión abierta): se acotaron al turno de 6 h" }
+  $sinAux = @($auxActivos | Where-Object { -not $auxiliares.Contains($_.cedula.Trim()) } | ForEach-Object { $_.nombre })
+  if ($sinAux.Count) { Avi "$($sinAux.Count) asesores sin tiempos en el Power BI: $($sinAux -join ', ')" }
+} catch {
+  Avi "no se pudo leer el Power BI de tiempos ($($_.Exception.Message)). El portal sale sin la pestaña de auxiliares."
+  $auxiliares = [ordered]@{}; $auxMeta = $null
+}
+
 # ==================================================================== SALIDA
 # El esquema va indexado por mes: en agosto cambia para todos, y el portal
 # tiene que poder mostrar julio con las reglas con las que julio se cerro.
@@ -731,6 +934,9 @@ $doc = [ordered]@{
   esquema  = $esqJson
   meses    = $mesesJson
   agentes  = $agentesJson
+  # Tiempos del día por asesor (Power BI de tiempos). Vacío si no respondió.
+  aux      = $auxiliares
+  auxMeta  = $auxMeta
 }
 
 $json = $doc | ConvertTo-Json -Depth 12 -Compress
