@@ -970,6 +970,46 @@ try {
   $auxiliares = [ordered]@{}; $auxMeta = $null
 }
 
+# ============================================================ EFECTIVIDAD
+# Llamadas y efectividad por día, desde el Power BI de operación ("Corte
+# Agentes Hogar"). Ese reporte solo muestra el día en curso, así que
+# capturar_efectividad.ps1 guarda una foto diaria en efectividad_historico.json
+# (lo corre también la tarea programada de la noche). Aquí se toma la foto del
+# momento y se arma el payload desde el histórico acumulado.
+Write-Host "`n== efectividad ==" -ForegroundColor Cyan
+try { & (Join-Path $PSScriptRoot 'capturar_efectividad.ps1') }
+catch { Avi "no se pudo tomar la foto de efectividad de hoy ($($_.Exception.Message)); se usa el histórico guardado" }
+$efJson = [ordered]@{}
+$efHist = Join-Path $PSScriptRoot 'efectividad_historico.json'
+if (Test-Path $efHist) {
+  $ej = [IO.File]::ReadAllText($efHist, [Text.UTF8Encoding]::new($false)) | ConvertFrom-Json
+  foreach ($pc in $ej.PSObject.Properties) {
+    $cc = $pc.Name
+    if (-not $porCC.ContainsKey($cc)) { continue }
+    $dias = @($pc.Value.PSObject.Properties | Sort-Object Name | ForEach-Object {
+      $x = $_.Value
+      $base = $x.m1 + $x.omni + $x.motor
+      [pscustomobject][ordered]@{ f=$_.Name; m1=$x.m1; omni=$x.omni; motor=$x.motor; man=$x.man; manU=$x.manU
+        acc=$x.acc; accB=$x.accB; tot=($x.m1 + $x.omni + $x.motor + $x.man)
+        efB = $(if ($x.m1) { [math]::Round(100 * $x.accB / $x.m1, 1) } else { $null })
+        efG = $(if ($base) { [math]::Round(100 * $x.acc / $base, 1) } else { $null }) }
+    } | Where-Object { $_.tot -gt 0 -or $_.acc -gt 0 })
+    if (-not $dias.Count) { continue }
+    $meses = [ordered]@{}
+    foreach ($g in ($dias | Group-Object { $_.f.Substring(0,7) })) {
+      $sm = @{}; foreach ($k in @('m1','omni','motor','man','manU','acc','accB','tot')) { $sm[$k] = [int](($g.Group | Measure-Object -Property $k -Sum).Sum) }
+      $base = $sm.m1 + $sm.omni + $sm.motor
+      $meses[$g.Name] = [ordered]@{ dias=$g.Count; m1=$sm.m1; omni=$sm.omni; motor=$sm.motor; man=$sm.man; manU=$sm.manU
+        acc=$sm.acc; accB=$sm.accB; tot=$sm.tot
+        efB = $(if ($sm.m1) { [math]::Round(100 * $sm.accB / $sm.m1, 1) } else { $null })
+        efG = $(if ($base) { [math]::Round(100 * $sm.acc / $base, 1) } else { $null }) }
+    }
+    $efJson[$cc] = [ordered]@{ dias = $dias; meses = $meses }
+  }
+  $efDias = @($efJson.Values | ForEach-Object { $_.dias } | ForEach-Object { $_.f } | Sort-Object -Unique)
+  if ($efDias.Count) { Ok ("efectividad: {0} asesores · {1} días guardados ({2} a {3})" -f $efJson.Count, $efDias.Count, $efDias[0], $efDias[-1]) }
+}
+
 # ====================================================================== OJT
 # Ventas OJT de la campaña (regla de Wilmer, 30/09/2026): cuentan
 #   (a) TODAS las de la campaña HOGAR_OJT, de cualquier supervisor, y
@@ -1043,6 +1083,8 @@ $doc = [ordered]@{
   meses    = $mesesJson
   agentes  = $agentesJson
   ojt      = $ojtJson
+  # Llamadas y efectividad diaria (foto diaria del Power BI de operación)
+  ef       = $efJson
   # Tiempos del día por asesor (Power BI de tiempos). Vacío si no respondió.
   aux      = $auxiliares
   auxMeta  = $auxMeta

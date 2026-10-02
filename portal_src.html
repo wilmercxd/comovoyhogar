@@ -599,8 +599,8 @@ const misReconocimientos = () => S.reconocimientos.filter(r => r.cc_asesor === S
 function pintarTabs(){
   const t = $('#tabs'); t.innerHTML = '';
   const defs = S.rol === 'SUPERVISOR'
-    ? [['equipo','Mi equipo'],['auxsup','Auxiliares del equipo'],['firmas','Firmas del equipo'],['notas','Consolidado de notas']]
-    : [['desempeno','Mi desempeño'],['auxiliares','Auxiliares'],['fb','Retroalimentación'],['metas','Mis metas']];
+    ? [['equipo','Mi equipo'],['auxsup','Auxiliares del equipo'],['efsup','Efectividad del equipo'],['firmas','Firmas del equipo'],['notas','Consolidado de notas']]
+    : [['desempeno','Mi desempeño'],['auxiliares','Auxiliares'],['efectividad','Llamadas y efectividad'],['fb','Retroalimentación'],['metas','Mis metas']];
   defs.forEach(([k,txt]) => {
     const b = el('button','tab'+(S.tab===k?' on':''), esc(txt));
     // Pestaña nueva: late con un «NUEVO» hasta que el asesor entre a verla.
@@ -616,7 +616,7 @@ function pintarTabs(){
 }
 function pintar(){
   const v = $('#vista'); v.innerHTML = '';
-  v.classList.toggle('ancho', S.tab === 'auxiliares' || S.tab === 'auxsup');
+  v.classList.toggle('ancho', ['auxiliares','auxsup','efectividad','efsup'].includes(S.tab));
   // Aviso de la pestaña nueva de Auxiliares: late hasta que el asesor entre.
   if(S.rol !== 'SUPERVISOR' && S.tab !== 'auxiliares' && auxDe(S.cc) && !auxVisto()){
     const av = el('div','aviso-aux',
@@ -627,7 +627,8 @@ function pintar(){
   }
   ({ desempeno:vDesempeno, fb:vFeedback, metas:vMetas,
      equipo:vEquipo, firmas:vFirmas, notas:vNotas,
-     auxiliares:vAuxiliares, auxsup:vAuxSup })[S.tab](v);
+     auxiliares:vAuxiliares, auxsup:vAuxSup,
+     efectividad:vEfectividad, efsup:vEfSup })[S.tab](v);
 }
 
 /* ===================================================================== */
@@ -915,6 +916,147 @@ function vAuxSup(v){
   v.appendChild(s);
 }
 
+
+
+/* ===================================================================== */
+/*  Llamadas y efectividad                                               */
+/*                                                                       */
+/*  Foto diaria del Power BI de operación ("Corte Agentes Hogar"). Ese   */
+/*  reporte solo muestra el día en curso; el generador guarda cada día   */
+/*  desde el 1/10/2026. Por día vienen conteos crudos y el mes se        */
+/*  recalcula sumando, con las mismas fórmulas del Power BI:             */
+/*    Efect Blaster = accesos blaster ÷ Marca1                           */
+/*    Efect General = accesos ÷ (Marca1 + OmniC + Motor)                 */
+/* ===================================================================== */
+const efDe = cc => (D.ef && D.ef[cc]) || null;
+const pctEf = x => x == null ? '—' : dec(x) + ' %';
+function mesesEf(){
+  const s = new Set();
+  Object.values(D.ef || {}).forEach(a => Object.keys(a.meses).forEach(k => s.add(k)));
+  return [...s].sort();
+}
+function nomMesEf(mk){
+  if(D.meses[mk]) return D.meses[mk].nombre;
+  const t = new Date(mk + '-15T12:00:00').toLocaleDateString('es-CO', {month:'long', year:'numeric'});
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+function selectorMesEf(v, meses){
+  if(meses.indexOf(S.mesEf) < 0) S.mesEf = meses[meses.length-1];
+  const c = el('div','meses');
+  meses.forEach(mk => {
+    const b = el('button','mesbtn'+(S.mesEf===mk?' on':''), esc(nomMesEf(mk)));
+    b.onclick = () => { S.mesEf = mk; pintar(); };
+    c.appendChild(b);
+  });
+  v.appendChild(c);
+}
+function sinEf(v){
+  v.appendChild(el('div','card p vacio',
+    'Todavía no hay días guardados. La efectividad se guarda cada día desde el 1 de octubre de 2026; aparece aquí con la próxima actualización.'));
+}
+const efSub = t => `<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">${t}</small>`;
+const EF_TH = `<th class="n">Marca1${efSub('(llamadas blaster)')}</th><th class="n">OmniC${efSub('(llamadas omnicanal)')}</th>
+  <th class="n">Motor${efSub('(llamadas del marcador)')}</th><th class="n">Manuales${efSub('(marcadas a mano)')}</th>
+  <th class="n">Manuales únicos${efSub('(números distintos)')}</th><th class="n">Total llamadas${efSub('(Marca1 + OmniC + Motor + manuales)')}</th>
+  <th class="n">Accesos (@)${efSub('(ventas del día)')}</th><th class="n">Efect. Blaster${efSub('(accesos blaster ÷ Marca1)')}</th>
+  <th class="n">Efect. General${efSub('(accesos ÷ Marca1 + OmniC + Motor)')}</th>`;
+const efTds = x => `<td class="n">${x.m1}</td><td class="n">${x.omni}</td><td class="n">${x.motor}</td><td class="n">${x.man}</td>
+  <td class="n">${x.manU}</td><td class="n"><b>${x.tot}</b></td><td class="n"><b>${x.acc}</b></td>
+  <td class="n">${pctEf(x.efB)}</td><td class="n">${pctEf(x.efG)}</td>`;
+function efSuma(L){
+  const t = {m1:0,omni:0,motor:0,man:0,manU:0,acc:0,accB:0,tot:0};
+  L.forEach(x => Object.keys(t).forEach(k => t[k] += x[k] || 0));
+  const base = t.m1 + t.omni + t.motor;
+  t.efB = t.m1 ? Math.round(1000 * t.accB / t.m1) / 10 : null;
+  t.efG = base ? Math.round(1000 * t.acc / base) / 10 : null;
+  return t;
+}
+function notaEf(v){
+  v.appendChild(el('div','nota',
+    `Fuente: Power BI de operación, «Corte Agentes Hogar». Ese reporte solo muestra el día en curso, así que el portal guarda una foto
+     de cada día desde el 1 de octubre de 2026. Efect. Blaster = accesos por blaster ÷ Marca1. Efect. General = accesos ÷
+     (Marca1 + OmniC + Motor), igual que el Power BI.`));
+}
+
+function vEfectividad(v){
+  const meses = mesesEf(), a = efDe(S.cc);
+  if(!meses.length || !a){ sinEf(v); return; }
+  selectorMesEf(v, meses);
+  const mk = S.mesEf, M = a.meses[mk];
+  if(!M){ v.appendChild(el('div','card p vacio','No hay llamadas tuyas guardadas en este mes.')); return; }
+  const g = el('div','kpis');
+  g.appendChild(kpi('Llamadas atendidas', String(M.tot), `En ${M.dias} días · ${un1(Math.round(10*M.tot/M.dias)/10)} por día`));
+  g.appendChild(kpi('Marca1', String(M.m1), 'Llamadas blaster'));
+  g.appendChild(kpi('Accesos (@)', String(M.acc), `${M.accB} por blaster`));
+  g.appendChild(kpi('Efectividad Blaster', pctEf(M.efB), 'Accesos blaster ÷ Marca1'));
+  g.appendChild(kpi('Efectividad General', pctEf(M.efG), 'Accesos ÷ Marca1 + OmniC + Motor'));
+  v.appendChild(g);
+
+  const s = el('section','sec');
+  s.appendChild(el('h3',null,'Día a día'));
+  const t = el('table','tbl aux');
+  t.innerHTML = `<thead><tr><th>Día</th>${EF_TH}</tr></thead>`;
+  const tb = el('tbody');
+  const L = a.dias.filter(d => d.f.slice(0,7) === mk);
+  L.slice().reverse().forEach(d => { const tr = el('tr'); tr.innerHTML = `<td>${fechaCorta(d.f)}</td>${efTds(d)}`; tb.appendChild(tr); });
+  t.appendChild(tb);
+  const tf = el('tfoot');
+  tf.innerHTML = `<tr style="background:#FAFAFE;font-weight:700;border-top:2px solid var(--linea)"><td>Total al corte · ${L.length} días</td>${efTds(M)}</tr>`;
+  t.appendChild(tf);
+  const en = el('div','card envolt'); en.appendChild(t); s.appendChild(en);
+  notaEf(s);
+  v.appendChild(s);
+}
+
+function vEfSup(v){
+  const meses = mesesEf();
+  if(!meses.length){ sinEf(v); return; }
+  selectorMesEf(v, meses);
+  const mk = S.mesEf;
+  const filas = D.agentes.map(a => ({a, M:(efDe(a.cc) || {meses:{}}).meses[mk]})).filter(x => x.M)
+                 .sort((x,y) => ((y.M.efG == null ? -1 : y.M.efG) - (x.M.efG == null ? -1 : x.M.efG)) || (y.M.acc - x.M.acc));
+  if(!filas.length){ v.appendChild(el('div','card p vacio','No hay llamadas del equipo guardadas en este mes.')); return; }
+  const T = efSuma(filas.map(x => x.M));
+
+  const g = el('div','kpis');
+  g.appendChild(kpi('Llamadas atendidas', String(T.tot), `${filas.length} asesores`));
+  g.appendChild(kpi('Marca1', String(T.m1), 'Llamadas blaster del equipo'));
+  g.appendChild(kpi('Accesos (@)', String(T.acc), `${T.accB} por blaster`));
+  g.appendChild(kpi('Efectividad Blaster', pctEf(T.efB), 'Del equipo'));
+  g.appendChild(kpi('Efectividad General', pctEf(T.efG), 'Del equipo'));
+  v.appendChild(g);
+
+  const s = el('section','sec');
+  s.appendChild(el('h3',null,'Por asesor · de mayor a menor efectividad general'));
+  const t = el('table','tbl aux');
+  t.innerHTML = `<thead><tr><th>Asesor</th><th class="n">Días</th>${EF_TH}</tr></thead>`;
+  const tb = el('tbody');
+  filas.forEach(({a,M}) => { const tr = el('tr'); tr.innerHTML = `<td>${esc(a.nombre)}</td><td class="n">${M.dias}</td>${efTds(M)}`; tb.appendChild(tr); });
+  t.appendChild(tb);
+  const tf = el('tfoot');
+  tf.innerHTML = `<tr style="background:#FAFAFE;font-weight:700;border-top:2px solid var(--linea)"><td>Total equipo</td><td class="n">—</td>${efTds(T)}</tr>`;
+  t.appendChild(tf);
+  const en = el('div','card envolt'); en.appendChild(t); s.appendChild(en);
+  v.appendChild(s);
+
+  // Día a día del equipo.
+  const porDia = {};
+  filas.forEach(({a}) => efDe(a.cc).dias.filter(d => d.f.slice(0,7) === mk).forEach(d => (porDia[d.f] = porDia[d.f] || []).push(d)));
+  const s2 = el('section','sec');
+  s2.appendChild(el('h3',null,'Día a día del equipo'));
+  const t2 = el('table','tbl aux');
+  t2.innerHTML = `<thead><tr><th>Día</th><th class="n">Asesores</th>${EF_TH}</tr></thead>`;
+  const tb2 = el('tbody');
+  Object.keys(porDia).sort().reverse().forEach(f => { const x = efSuma(porDia[f]); const tr = el('tr');
+    tr.innerHTML = `<td>${fechaCorta(f)}</td><td class="n">${porDia[f].length}</td>${efTds(x)}`; tb2.appendChild(tr); });
+  t2.appendChild(tb2);
+  const tf2 = el('tfoot');
+  tf2.innerHTML = `<tr style="background:#FAFAFE;font-weight:700;border-top:2px solid var(--linea)"><td>Total al corte</td><td class="n">—</td>${efTds(T)}</tr>`;
+  t2.appendChild(tf2);
+  const e2 = el('div','card envolt'); e2.appendChild(t2); s2.appendChild(e2);
+  notaEf(s2);
+  v.appendChild(s2);
+}
 
 /* ===================================================================== */
 /*  Selector de mes                                                      */

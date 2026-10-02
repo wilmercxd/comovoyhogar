@@ -15,3 +15,6 @@ ventas.json
 .vercel/
 .env
 .env.*
+
+# Log de la tarea nocturna de efectividad (se reescribe cada noche).
+captura_efectividad.log
