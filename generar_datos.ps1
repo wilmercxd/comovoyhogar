@@ -739,6 +739,14 @@ foreach ($a in ($asesores | Sort-Object nombre)) {
 Write-Host "`n== auxiliares ==" -ForegroundColor Cyan
 
 $AUX_TURNO = 360; $AUX_BREAK = 20; $AUX_BANO = 5
+# Enigma (el softphone) no separa Call Out ni Working ni motivo de pausa: todo
+# cae en la «Pausa» genérica. Quien tiene Call Out + Working en 0 todo el mes se
+# trata como Enigma y solo cuenta como perdido el EXCESO de la pausa sobre esta
+# tolerancia diaria (la misma lógica del break y el baño). Definida por Wilmer
+# (01/10/2026): 30 min para todas las campañas.
+$AUX_TOL_PAUSA = 30
+$AUX_HIST = Join-Path $PSScriptRoot 'auxiliares_historico.json'
+$AUX_CAMPOS = @('f','con','brk','ban','pau','pco','pw','coa','acw','inc','lla','dis','ocu','adh','ini','fin')
 $PBI_KEY   = 'e18997ed-2d66-4158-b6ab-54168d282057'
 $PBI_HOST  = 'https://wabi-south-central-us-c-primary-api.analysis.windows.net'
 $PBI_MED   = @('Horas_conexion_agente','Break','Baño','Pausa Call Out','Pausa Working','Coaching',
@@ -869,12 +877,56 @@ try {
     $diasLeidos++
   }
 
+  # --- Histórico: el Power BI solo devuelve los últimos meses. Se guardan los
+  #     días crudos y los nuevos pisan a los viejos; los que ya no devuelve se
+  #     conservan.
+  $hist = @{}
+  if (Test-Path $AUX_HIST) {
+    $hj = [IO.File]::ReadAllText($AUX_HIST, [Text.UTF8Encoding]::new($false)) | ConvertFrom-Json
+    foreach ($pc in $hj.PSObject.Properties) {
+      $hist[$pc.Name] = @{}
+      foreach ($pd in $pc.Value.PSObject.Properties) { $hist[$pc.Name][$pd.Name] = $pd.Value }
+    }
+  }
+  foreach ($cc in @($auxiliares.Keys)) {
+    if (-not $hist.ContainsKey($cc)) { $hist[$cc] = @{} }
+    foreach ($d in $auxiliares[$cc].dias) {
+      $o = [ordered]@{}; foreach ($c in $AUX_CAMPOS) { $o[$c] = $d.$c }
+      $hist[$cc][$d.f] = [pscustomobject]$o
+    }
+  }
+  $nuevasHist = 0
+  foreach ($cc in @($hist.Keys)) {
+    if (-not $porCC.ContainsKey($cc)) { continue }
+    if (-not $auxiliares.Contains($cc)) { $auxiliares[$cc] = [ordered]@{ dias = @(); meses = [ordered]@{} } }
+    $yaF = @{}; foreach ($d in $auxiliares[$cc].dias) { $yaF[$d.f] = 1 }
+    foreach ($f in @($hist[$cc].Keys)) {
+      if ($yaF.ContainsKey($f)) { continue }
+      $auxiliares[$cc].dias += ,([pscustomobject]$hist[$cc][$f]); $nuevasHist++
+    }
+  }
+  [IO.File]::WriteAllText($AUX_HIST, ($hist | ConvertTo-Json -Depth 5 -Compress), (New-Object Text.UTF8Encoding $false))
+  if ($nuevasHist) { Ok "$nuevasHist días de auxiliares recuperados del histórico (el Power BI ya no los devuelve)" }
+
   # --- Por mes: ritmo propio del asesor y ventas que representa lo perdido
   foreach ($cc in @($auxiliares.Keys)) {
     $dias = @($auxiliares[$cc].dias | Sort-Object { $_.f })
     $auxiliares[$cc].dias = $dias
     foreach ($g in ($dias | Group-Object { $_.f.Substring(0,7) })) {
       $mk = $g.Name
+      # ¿Enigma este mes? Ni un solo minuto de Call Out ni Working en el mes.
+      $eni = ((($g.Group | ForEach-Object { [double]$_.pco + [double]$_.pw }) | Measure-Object -Sum).Sum -eq 0)
+      foreach ($d in $g.Group) {
+        $exB = [math]::Max(0, $d.brk - $AUX_BREAK); $exN = [math]::Max(0, $d.ban - $AUX_BANO)
+        $exP = if ($eni) { [math]::Max(0, $d.pau - $AUX_TOL_PAUSA) } else { $d.pau }
+        $perdD = [math]::Round($exB + $exN + $exP + $d.pco + $d.pw, 1)
+        $d | Add-Member -NotePropertyName perd  -NotePropertyValue $perdD -Force
+        $d | Add-Member -NotePropertyName exBrk -NotePropertyValue ([math]::Round($exB,1)) -Force
+        $d | Add-Member -NotePropertyName exBan -NotePropertyValue ([math]::Round($exN,1)) -Force
+        $d | Add-Member -NotePropertyName exPau -NotePropertyValue ([math]::Round($exP,1)) -Force
+        $d | Add-Member -NotePropertyName eni   -NotePropertyValue ([bool]$eni) -Force
+        $d | Add-Member -NotePropertyName prod  -NotePropertyValue ([math]::Round([math]::Min($AUX_TURNO, $d.lla + $d.dis),1)) -Force
+      }
       # En Hogar la venta que cuenta es la INSTALADA, medida por FECHA AGENDA.
       $exMes = @($ventas.Values | Where-Object { $_.cc -eq $cc -and $_.estado -eq 'INSTALADO' -and $_.agenda.ToString('yyyy-MM') -eq $mk })
       $cfmMes = [double](($exMes | Measure-Object -Property cfm -Sum).Sum)
@@ -889,7 +941,9 @@ try {
         perdDia= [math]::Round($perd / [math]::Max(1,$g.Count),1)
         exBrk  = [math]::Round((($g.Group | Measure-Object -Property exBrk -Sum).Sum),0)
         exBan  = [math]::Round((($g.Group | Measure-Object -Property exBan -Sum).Sum),0)
-        pau    = [math]::Round((($g.Group | Measure-Object -Property pau -Sum).Sum),0)
+        pau    = [math]::Round((($g.Group | Measure-Object -Property exPau -Sum).Sum),0)   # lo que CUENTA como perdido de la pausa
+        pauBruta = [math]::Round((($g.Group | Measure-Object -Property pau -Sum).Sum),0)
+        eni    = [bool]$eni
         pco    = [math]::Round((($g.Group | Measure-Object -Property pco -Sum).Sum),0)
         pw     = [math]::Round((($g.Group | Measure-Object -Property pw  -Sum).Sum),0)
         hProd  = [math]::Round($hProd,1)
@@ -904,7 +958,7 @@ try {
       }
     }
   }
-  $auxMeta = [ordered]@{ turno=$AUX_TURNO; brk=$AUX_BREAK; ban=$AUX_BANO;
+  $auxMeta = [ordered]@{ tolPausa=$AUX_TOL_PAUSA; turno=$AUX_TURNO; brk=$AUX_BREAK; ban=$AUX_BANO;
                          desde=(@($auxiliares.Values | ForEach-Object { $_.dias } | ForEach-Object { $_.f } | Sort-Object))[0]
                          hasta=(@($auxiliares.Values | ForEach-Object { $_.dias } | ForEach-Object { $_.f } | Sort-Object))[-1] }
   Ok ("Power BI de tiempos: {0} días-asesor de {1} asesores · {2} a {3}" -f $diasLeidos, $auxiliares.Count, $auxMeta.desde, $auxMeta.hasta)

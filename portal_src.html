@@ -664,7 +664,7 @@ function semanasAux(dias, ritmo){
     const L = g[k], perd = L.reduce((s,d) => s + d.perd, 0);
     const sab = new Date(k + 'T12:00:00'); sab.setDate(sab.getDate() + 5);
     return { ini:k, fin:sab.toISOString().slice(0,10), dias:L.length, perd,
-             pau:L.reduce((s,d) => s + d.pau, 0), perdDia: perd / L.length,
+             pau:L.reduce((s,d) => s + (d.exPau != null ? d.exPau : d.pau), 0), perdDia: perd / L.length,
              v: Math.round(perd / 60 * ritmo * 10) / 10 };
   });
 }
@@ -674,6 +674,10 @@ function avisoHoras(v){
 }
 // Total de pausas del día, igual a «C1 Pausas Permitidas» del Power BI.
 const c1De = d => (d.brk||0)+(d.ban||0)+(d.pau||0)+(d.pco||0)+(d.pw||0)+(d.coa||0)+(d.acw||0)+(d.inc||0);
+// Enigma (softphone) no separa Call Out, Working ni motivo de pausa: todo cae en
+// la «Pausa» genérica. Para quien está en Enigma ese mes, solo el exceso sobre
+// la tolerancia diaria cuenta como perdido.
+const tolPausa = () => (D.auxMeta && D.auxMeta.tolPausa) || 0;
 const auxDe = cc => (D.aux && D.aux[cc]) || null;
 const auxVisto = () => { try { return localStorage.getItem('auxVisto_' + S.cc) === '1'; } catch(e){ return false; } };
 const marcarAuxVisto = () => { try { localStorage.setItem('auxVisto_' + S.cc, '1'); } catch(e){} };
@@ -681,7 +685,8 @@ const marcarAuxVisto = () => { try { localStorage.setItem('auxVisto_' + S.cc, '1
 function mesesAux(){
   const s = new Set();
   Object.values(D.aux || {}).forEach(a => Object.keys(a.meses).forEach(k => s.add(k)));
-  return [...s].sort();
+  // Solo meses que el portal conoce: el Power BI puede traer días posteriores al corte.
+  return [...s].filter(k => D.meses[k]).sort();
 }
 function selectorMesAux(v, meses){
   if(meses.indexOf(S.mesAux) < 0) S.mesAux = meses[meses.length-1];
@@ -709,6 +714,10 @@ function vAuxiliares(v){
   const mk = S.mesAux, M = a.meses[mk];
   if(!M){ v.appendChild(el('div','card p vacio','No hay tiempos tuyos registrados en este mes.')); return; }
   const R = D.auxMeta;
+  const ENI = !!M.eni, TOL = tolPausa();
+  if(ENI) v.appendChild(el('div','callout',
+    `<b>Trabajas en Enigma.</b> Enigma no separa Call Out, Working ni el motivo de la pausa: todo cae en «En pausa».
+     Por eso se toleran <b>${TOL} min de pausa por día</b> y solo cuenta como perdido lo que pase de ahí.`));
 
   const g = el('div','kpis');
   g.appendChild(kpi('Tiempo perdido', hm(M.perd), `En ${M.dias} días conectados`));
@@ -720,7 +729,7 @@ function vAuxiliares(v){
   v.appendChild(g);
 
   // El mensaje en una línea: cuánto, en qué, y qué vale.
-  const partes = [['Pausa sin motivo', M.pau], ['Exceso de break', M.exBrk], ['Exceso de baño', M.exBan],
+  const partes = [[ENI ? `Exceso de pausa (sobre ${TOL} min/día)` : 'Pausa sin motivo', M.pau], ['Exceso de break', M.exBrk], ['Exceso de baño', M.exBan],
                   ['Pausa Call Out', M.pco], ['Pausa Working', M.pw]].filter(x => x[1] > 0).sort((x,y) => y[1]-x[1]);
   if(M.perd >= 1 && partes.length){
     v.appendChild(el('div','callout a',
@@ -748,7 +757,7 @@ function vAuxiliares(v){
   s1.appendChild(c1);
   s1.appendChild(el('div','nota',
     `Cuenta como tiempo perdido lo que pase de <b>${R.brk} min de break</b> y <b>${R.ban} min de baño</b> por día,
-     más toda la <b>Pausa sin motivo</b> (la «Pausa» genérica del marcador: no es columna en la tabla del Power BI, está dentro de «C1 Pausas Permitidas» y en la dona de pausas), la Pausa Call Out y la Pausa Working. <b>No cuentan</b> el coaching, el ACW ni los
+     más ${ENI ? `lo que pase de <b>${TOL} min de pausa</b> por día (en Enigma la «Pausa» genérica incluye también el tiempo de Call Out y Working, que Enigma no separa)` : 'toda la <b>Pausa sin motivo</b>'} (la «Pausa» genérica del marcador: no es columna en la tabla del Power BI, está dentro de «C1 Pausas Permitidas» y en la dona de pausas), la Pausa Call Out y la Pausa Working. <b>No cuentan</b> el coaching, el ACW ni los
      incidentes técnicos: esos los manda la operación o son parte del trabajo de la llamada.`));
   v.appendChild(s1);
 
@@ -759,7 +768,7 @@ function vAuxiliares(v){
   sS.appendChild(el('h3',null,'Semana a semana · lunes a sábado'));
   const tS = el('table','tbl aux');
   tS.innerHTML = `<thead><tr><th>Semana</th><th class="n">Días</th><th class="n">Tiempo perdido<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(sin motivo + excesos + call out + working)</small></th>
-    <th class="n">Por día</th><th class="n">De eso, pausa sin motivo</th><th class="n">Instaladas que representa</th></tr></thead>`;
+    <th class="n">Por día</th><th class="n">${ENI ? 'De eso, exceso de pausa' : 'De eso, pausa sin motivo'}</th><th class="n">Instaladas que representa</th></tr></thead>`;
   const bS = el('tbody');
   sem.forEach((w,i) => {
     const ant = sem[i-1], tend = ant ? (w.perdDia < ant.perdDia - 1 ? ' <span style="color:var(--ok)">▼ mejoró</span>'
@@ -784,9 +793,9 @@ function vAuxiliares(v){
   s2.appendChild(el('h3',null,'Día a día'));
   const t = el('table','tbl aux');
   t.innerHTML = `<thead><tr><th>Día</th><th class="n">Inicio<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(primer ingreso del día)</small></th><th class="n">Salida<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(hora militar)</small></th><th class="n">Conexión<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(total logueado · turno 6 h)</small></th><th class="n">Break<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(permitido 20 min)</small></th><th class="n">Baño<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(permitido 5 min)</small></th>
-    <th class="n">Pausa sin motivo<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(«Pausa» genérica, sin elegir motivo)</small></th><th class="n">Call Out<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(Pausa Call Out · rojo si pasa de 30 min)</small></th><th class="n">Working<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(Pausa Working)</small></th><th class="n">Coaching<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(no cuenta como perdido)</small></th>
+    ${ENI ? `<th class="n">Pausa (Enigma)<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(sin motivo ni Call Out · se toleran ${TOL} min/día · rojo si pasa)</small></th>` : `<th class="n">Pausa sin motivo<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(«Pausa» genérica, sin elegir motivo)</small></th><th class="n">Call Out<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(Pausa Call Out · rojo si pasa de 30 min)</small></th><th class="n">Working<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(Pausa Working)</small></th>`}<th class="n">Coaching<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(no cuenta como perdido)</small></th>
     <th class="n">ACW<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(post-llamada · no cuenta · rojo si pasa de 35 min)</small></th><th class="n" title="Suma de todas las pausas, igual a la columna C1 Pausas Permitidas del Power BI">Total pausas<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(C1 del Power BI: todas las pausas)</small></th>
-    <th class="n">Perdido<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(sin motivo + exceso break + exceso baño + call out + working)</small></th><th class="n">Instaladas equiv.<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(perdido × tu ritmo de instaladas por hora)</small></th><th class="n">Ocupación<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(tiempo en llamada vs. conectado · rojo bajo 60 %)</small></th><th class="n">Adherencia<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(cumplimiento del turno · rojo bajo 90 %)</small></th></tr></thead>`;
+    <th class="n">Perdido<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(${ENI ? `exceso de pausa sobre ${TOL} min + exceso break + exceso baño` : 'sin motivo + exceso break + exceso baño + call out + working'})</small></th><th class="n">Instaladas equiv.<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(perdido × tu ritmo de instaladas por hora)</small></th><th class="n">Ocupación<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(tiempo en llamada vs. conectado · rojo bajo 60 %)</small></th><th class="n">Adherencia<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(cumplimiento del turno · rojo bajo 90 %)</small></th></tr></thead>`;
   const tb = el('tbody');
   const rojo = 'color:var(--mal);font-weight:700';
   a.dias.filter(d => d.f.slice(0,7) === mk).slice().reverse().forEach(d => {
@@ -796,9 +805,9 @@ function vAuxiliares(v){
       <td class="n" style="${d.con < R.turno - 15 ? rojo : ''}">${hm(d.con)}</td>
       <td class="n" style="${Math.round(d.brk) > R.brk ? rojo : ''}">${hm(d.brk)}</td>
       <td class="n" style="${Math.round(d.ban) > R.ban ? rojo : ''}">${hm(d.ban)}</td>
-      <td class="n" style="${Math.round(d.pau) > 0 ? rojo : ''}">${hm(d.pau)}</td>
-      <td class="n" style="${Math.round(d.pco) > LIM.pco ? rojo : ''}">${hm(d.pco)}</td>
-      <td class="n">${hm(d.pw)}</td>
+      <td class="n" style="${Math.round(d.pau) > (ENI ? TOL : 0) ? rojo : ''}">${hm(d.pau)}</td>
+      ${ENI ? '' : `<td class="n" style="${Math.round(d.pco) > LIM.pco ? rojo : ''}">${hm(d.pco)}</td>
+      <td class="n">${hm(d.pw)}</td>`}
       <td class="n" style="color:var(--tx3)">${hm(d.coa)}</td>
       <td class="n" style="${Math.round(d.acw) > LIM.acw ? rojo : 'color:var(--tx3)'}">${hm(d.acw)}</td>
       <td class="n">${hm(c1De(d))}</td>
@@ -814,8 +823,8 @@ function vAuxiliares(v){
   const tf = el('tfoot');
   tf.innerHTML = `<tr style="background:#FAFAFE;font-weight:700;border-top:2px solid var(--linea)">
     <td>Total al corte · ${diasMes.length} días</td><td></td><td></td><td class="n">${hm(sm('con'))}</td><td class="n">${hm(sm('brk'))}</td>
-    <td class="n">${hm(sm('ban'))}</td><td class="n">${hm(sm('pau'))}</td><td class="n">${hm(sm('pco'))}</td>
-    <td class="n">${hm(sm('pw'))}</td><td class="n">${hm(sm('coa'))}</td><td class="n">${hm(sm('acw'))}</td>
+    <td class="n">${hm(sm('ban'))}</td><td class="n">${hm(sm('pau'))}</td>${ENI ? '' : `<td class="n">${hm(sm('pco'))}</td>
+    <td class="n">${hm(sm('pw'))}</td>`}<td class="n">${hm(sm('coa'))}</td><td class="n">${hm(sm('acw'))}</td>
     <td class="n">${hm(diasMes.reduce((s,d) => s + c1De(d), 0))}</td><td class="n">${hm(sm('perd'))}</td>
     <td class="n">${un1(M.vPerd)}</td><td class="n">${dec(M.ocu)} %</td><td class="n">${dec(M.adh)} %</td></tr>`;
   t.appendChild(tf);
@@ -874,7 +883,7 @@ function vAuxSup(v){
   s.appendChild(el('h3',null,'Por asesor · de más a menos instaladas perdidas'));
   const t = el('table','tbl aux');
   t.innerHTML = `<thead><tr><th>Asesor</th><th class="n">Días</th><th class="n">Perdido<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(sin motivo + exceso break + exceso baño + call out + working)</small></th><th class="n">Por día</th>
-    <th class="n">Pausa sin motivo<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(«Pausa» genérica, sin elegir motivo)</small></th><th class="n">Exc. break<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(lo que pasa de 20 min)</small></th><th class="n">Exc. baño<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(lo que pasa de 5 min)</small></th><th class="n">Call Out + Working<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(pausas de esos dos tipos)</small></th>
+    <th class="n">Pausa que cuenta<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(Enigma: lo que pasa de ${tolPausa()} min/día · OCM: toda la pausa sin motivo)</small></th><th class="n">Exc. break<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(lo que pasa de 20 min)</small></th><th class="n">Exc. baño<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(lo que pasa de 5 min)</small></th><th class="n">Call Out + Working<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(pausas de esos dos tipos)</small></th>
     <th class="n">Ritmo v/h<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(instaladas por hora en llamada + disponible)</small></th><th class="n">Instaladas perdidas<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(horas perdidas × ritmo)</small></th><th class="n">Ocupación<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(tiempo en llamada vs. conectado · rojo bajo 60 %)</small></th><th class="n">Adherencia<br><small style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3)">(cumplimiento del turno · rojo bajo 90 %)</small></th></tr></thead>`;
   const tb = el('tbody');
   filas.forEach(({a,M}) => {
@@ -900,7 +909,8 @@ function vAuxSup(v){
   const en = el('div','card envolt'); en.appendChild(t); s.appendChild(en);
   s.appendChild(el('div','nota',
     `Tiempo perdido = exceso sobre ${D.auxMeta.brk} min de break y ${D.auxMeta.ban} min de baño por día, más Pausa sin motivo,
-     Pausa Call Out y Pausa Working. Coaching, ACW e incidentes técnicos no cuentan. Instaladas perdidas = horas perdidas ×
+     Pausa Call Out y Pausa Working. Quien trabaja en Enigma (no separa Call Out, Working ni motivo de pausa) tiene
+     ${tolPausa()} min de pausa tolerados por día: solo cuenta el exceso. Coaching, ACW e incidentes técnicos no cuentan. Instaladas perdidas = horas perdidas ×
      ritmo propio del asesor en el mes.`));
   v.appendChild(s);
 }
