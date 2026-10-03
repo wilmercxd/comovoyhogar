@@ -599,9 +599,11 @@ const misReconocimientos = () => S.reconocimientos.filter(r => r.cc_asesor === S
 function pintarTabs(){
   const t = $('#tabs'); t.innerHTML = '';
   const defs = S.rol === 'SUPERVISOR'
-    ? [['equipo','Mi equipo'],['auxsup','Auxiliares del equipo'],['efsup','Efectividad del equipo'],['firmas','Firmas del equipo'],['notas','Consolidado de notas']]
-    : [['desempeno','Mi desempeño'],['auxiliares','Auxiliares'],['efectividad','Llamadas y efectividad'],['fb','Retroalimentación'],['metas','Mis metas']];
-  defs.forEach(([k,txt]) => {
+    ? [['equipo','Mi equipo'],['auxsup','Auxiliares del equipo'],['efsup','Efectividad del equipo'],['tipsup','Tipificaciones del equipo'],['carsup','Análisis de cargas'],['firmas','Firmas del equipo'],['notas','Consolidado de notas']]
+    : [['desempeno','Mi desempeño'],['auxiliares','Auxiliares'],['efectividad','Llamadas y efectividad'],['tipif','Mis tipificaciones'],['fb','Retroalimentación'],['metas','Mis metas']];
+  // Tipificaciones y cargas solo aparecen si la extracción las trajo.
+  const defsOk = defs.filter(([k]) => !((k==='tipsup' || k==='tipif') && !D.tip) && !(k==='carsup' && !D.car));
+  defsOk.forEach(([k,txt]) => {
     const b = el('button','tab'+(S.tab===k?' on':''), esc(txt));
     // Pestaña nueva: late con un «NUEVO» hasta que el asesor entre a verla.
     if(k==='auxiliares' && !auxVisto()) b.appendChild(el('span','pill nuevo','NUEVO'));
@@ -616,7 +618,7 @@ function pintarTabs(){
 }
 function pintar(){
   const v = $('#vista'); v.innerHTML = '';
-  v.classList.toggle('ancho', ['auxiliares','auxsup','efectividad','efsup'].includes(S.tab));
+  v.classList.toggle('ancho', ['auxiliares','auxsup','efectividad','efsup','tipif','tipsup','carsup'].includes(S.tab));
   // Aviso de la pestaña nueva de Auxiliares: late hasta que el asesor entre.
   if(S.rol !== 'SUPERVISOR' && S.tab !== 'auxiliares' && auxDe(S.cc) && !auxVisto()){
     const av = el('div','aviso-aux',
@@ -628,7 +630,8 @@ function pintar(){
   ({ desempeno:vDesempeno, fb:vFeedback, metas:vMetas,
      equipo:vEquipo, firmas:vFirmas, notas:vNotas,
      auxiliares:vAuxiliares, auxsup:vAuxSup,
-     efectividad:vEfectividad, efsup:vEfSup })[S.tab](v);
+     efectividad:vEfectividad, efsup:vEfSup,
+     tipif:vTipif, tipsup:vTipSup, carsup:vCargas })[S.tab](v);
 }
 
 /* ===================================================================== */
@@ -1056,6 +1059,204 @@ function vEfSup(v){
   const e2 = el('div','card envolt'); e2.appendChild(t2); s2.appendChild(e2);
   notaEf(s2);
   v.appendChild(s2);
+}
+
+/* ===================================================================== */
+/*  Tipificaciones y análisis de cargas                                  */
+/*                                                                       */
+/*  Salen de la extracción diaria del Power BI «Corte Agentes» (carpeta  */
+/*  EXTRACCION DE EFECTIVIDADES POWER BI). Tipificaciones: por asesor y  */
+/*  día, con la duración de la llamada. Cargas: hora a hora, de toda la  */
+/*  campaña Hogar; solo las ve el supervisor.                            */
+/* ===================================================================== */
+const TIP_B = ['Menos de 1 min','1 a 3 min','3 a 5 min','5 min o más'];
+const nfC = n => Math.round(n || 0).toLocaleString('es-CO');
+const pf  = x => x == null || !isFinite(x) ? '—' : dec(100 * x) + ' %';
+function mesesTip(){
+  const s = new Set(Object.keys((D.tip && D.tip.dias) || {}).map(f => f.slice(0,7)));
+  return [...s].sort();
+}
+function selectorMesTip(v, meses){
+  if(meses.indexOf(S.mesTip) < 0) S.mesTip = meses[meses.length-1];
+  const c = el('div','meses');
+  meses.forEach(mk => {
+    const b = el('button','mesbtn'+(S.mesTip===mk?' on':''), esc(nomMesEf(mk)));
+    b.onclick = () => { S.mesTip = mk; pintar(); };
+    c.appendChild(b);
+  });
+  v.appendChild(c);
+}
+// Suma del mes por tipificación para una lista de cédulas: {idx:[<1, 1-3, 3-5, 5+]}
+function tipSuma(ccs, mk){
+  const T = {}, dias = D.tip.dias;
+  Object.keys(dias).filter(f => f.slice(0,7) === mk).forEach(f => ccs.forEach(cc => {
+    const d = dias[f][cc]; if(!d) return;
+    Object.keys(d).forEach(i => { const t = T[i] = T[i] || [0,0,0,0]; d[i].forEach((n,j) => t[j] += n); });
+  }));
+  return T;
+}
+const tipTot = a => a[0] + a[1] + a[2] + a[3];
+const tipNom = i => D.tip.tips[+i];
+function tipTablaTipos(v, T, titulo){
+  const idx = Object.keys(T).sort((a,b) => tipTot(T[b]) - tipTot(T[a]));
+  const tot = idx.reduce((s,i) => s + tipTot(T[i]), 0);
+  const s = el('section','sec'); s.appendChild(el('h3',null,titulo));
+  const t = el('table','tbl aux');
+  t.innerHTML = `<thead><tr><th>Tipificación</th><th class="n">Llamadas</th><th class="n">% del total</th>
+    ${TIP_B.map(b => `<th class="n">${b}</th>`).join('')}</tr></thead>`;
+  const tb = el('tbody');
+  idx.forEach(i => { const a = T[i], n = tipTot(a), tr = el('tr');
+    tr.innerHTML = `<td>${esc(tipNom(i))}</td><td class="n"><b>${nfC(n)}</b></td><td class="n">${pf(n/tot)}</td>${a.map(x => `<td class="n">${nfC(x)}</td>`).join('')}`;
+    tb.appendChild(tr); });
+  t.appendChild(tb);
+  const sum = [0,1,2,3].map(j => idx.reduce((s,i) => s + T[i][j], 0));
+  const tf = el('tfoot');
+  tf.innerHTML = `<tr style="background:#FAFAFE;font-weight:700;border-top:2px solid var(--linea)"><td>Total</td><td class="n">${nfC(tot)}</td><td class="n">100 %</td>${sum.map(x => `<td class="n">${nfC(x)}</td>`).join('')}</tr>`;
+  t.appendChild(tf);
+  const en = el('div','card envolt'); en.appendChild(t); s.appendChild(en); v.appendChild(s);
+  return idx;
+}
+function notaTip(v){
+  v.appendChild(el('div','nota',
+    `Fuente: Power BI de operación, «Corte Agentes», guardado cada noche en la extracción de efectividades. Cuenta las llamadas por
+     la tipificación con que cerró el asesor y por cuánto duraron. Solo hay datos desde que empezó la extracción; cada día que pasa se
+     suma al histórico.`));
+}
+function sinTip(v){
+  v.appendChild(el('div','card p vacio','Todavía no hay tipificaciones guardadas. Se cargan con la extracción diaria; aparecen con la próxima actualización.'));
+}
+function vTipif(v){
+  const meses = mesesTip();
+  if(!D.tip || !meses.length){ sinTip(v); return; }
+  selectorMesTip(v, meses);
+  const mk = S.mesTip, T = tipSuma([S.cc], mk), idx = Object.keys(T).sort((a,b) => tipTot(T[b]) - tipTot(T[a]));
+  if(!idx.length){ v.appendChild(el('div','card p vacio','No hay tipificaciones tuyas guardadas en este mes.')); return; }
+  const tot = idx.reduce((s,i) => s + tipTot(T[i]), 0);
+  const dias = Object.keys(D.tip.dias).filter(f => f.slice(0,7) === mk && D.tip.dias[f][S.cc]).sort();
+  const g = el('div','kpis');
+  g.appendChild(kpi('Llamadas tipificadas', nfC(tot), `En ${dias.length} días · ${un1(Math.round(10*tot/dias.length)/10)} por día`));
+  g.appendChild(kpi('Tipificación más usada', esc(tipNom(idx[0])), `${nfC(tipTot(T[idx[0]]))} llamadas · ${pf(tipTot(T[idx[0]])/tot)}`));
+  const largas = idx.reduce((s,i) => s + T[i][3], 0);
+  g.appendChild(kpi('Llamadas de 5 min o más', nfC(largas), `${pf(largas/tot)} de tus llamadas`));
+  v.appendChild(g);
+  tipTablaTipos(v, T, 'Tus llamadas por tipificación');
+  const top = idx.slice(0,6);
+  const s = el('section','sec'); s.appendChild(el('h3',null,'Día a día · tus 6 tipificaciones más usadas'));
+  const t = el('table','tbl aux');
+  t.innerHTML = `<thead><tr><th>Día</th><th class="n">Llamadas</th>${top.map(i => `<th class="n">${esc(tipNom(i))}</th>`).join('')}</tr></thead>`;
+  const tb = el('tbody');
+  dias.slice().reverse().forEach(f => { const d = D.tip.dias[f][S.cc], tr = el('tr');
+    const n = Object.keys(d).reduce((s,i) => s + tipTot(d[i]), 0);
+    tr.innerHTML = `<td>${fechaCorta(f)}</td><td class="n"><b>${nfC(n)}</b></td>${top.map(i => `<td class="n">${d[i] ? nfC(tipTot(d[i])) : 0}</td>`).join('')}`;
+    tb.appendChild(tr); });
+  t.appendChild(tb);
+  const en = el('div','card envolt'); en.appendChild(t); s.appendChild(en); notaTip(s); v.appendChild(s);
+}
+function vTipSup(v){
+  const meses = mesesTip();
+  if(!D.tip || !meses.length){ sinTip(v); return; }
+  selectorMesTip(v, meses);
+  const mk = S.mesTip, ccs = D.agentes.map(a => a.cc), T = tipSuma(ccs, mk);
+  const idx0 = Object.keys(T).sort((a,b) => tipTot(T[b]) - tipTot(T[a]));
+  if(!idx0.length){ v.appendChild(el('div','card p vacio','No hay tipificaciones del equipo guardadas en este mes.')); return; }
+  const tot = idx0.reduce((s,i) => s + tipTot(T[i]), 0);
+  const quien = D.agentes.filter(a => Object.keys(D.tip.dias).some(f => f.slice(0,7) === mk && D.tip.dias[f][a.cc]));
+  const g = el('div','kpis');
+  g.appendChild(kpi('Llamadas tipificadas', nfC(tot), `${quien.length} asesores`));
+  g.appendChild(kpi('Tipificación más usada', esc(tipNom(idx0[0])), `${nfC(tipTot(T[idx0[0]]))} llamadas · ${pf(tipTot(T[idx0[0]])/tot)}`));
+  const largas = idx0.reduce((s,i) => s + T[i][3], 0);
+  g.appendChild(kpi('Llamadas de 5 min o más', nfC(largas), `${pf(largas/tot)} del total`));
+  v.appendChild(g);
+  const idx = tipTablaTipos(v, T, 'Llamadas del equipo por tipificación');
+  const top = idx.slice(0,6);
+  const s = el('section','sec'); s.appendChild(el('h3',null,'Por asesor · sus 6 tipificaciones más usadas del equipo'));
+  const t = el('table','tbl aux');
+  t.innerHTML = `<thead><tr><th>Asesor</th><th class="n">Llamadas</th>${top.map(i => `<th class="n">${esc(tipNom(i))}</th>`).join('')}</tr></thead>`;
+  const tb = el('tbody');
+  quien.map(a => ({a, T:tipSuma([a.cc], mk)})).sort((x,y) => Object.values(y.T).reduce((s,z)=>s+tipTot(z),0) - Object.values(x.T).reduce((s,z)=>s+tipTot(z),0))
+    .forEach(({a,T:Ta}) => { const n = Object.values(Ta).reduce((s,z) => s + tipTot(z), 0), tr = el('tr');
+      tr.innerHTML = `<td>${esc(a.nombre)}</td><td class="n"><b>${nfC(n)}</b></td>${top.map(i => `<td class="n">${Ta[i] ? nfC(tipTot(Ta[i])) : 0}</td>`).join('')}`;
+      tb.appendChild(tr); });
+  t.appendChild(tb);
+  const en = el('div','card envolt'); en.appendChild(t); s.appendChild(en); notaTip(s); v.appendChild(s);
+}
+
+// Cargas: fila = [hora, región, estrategia, carga, llamadas, escucha, Marca1, atendidos, abandonos, contacto, alcance, agentes, TMO]
+function carSuma(L){
+  const t = {ll:0, esc:0, m1:0, at:0, ab:0, tmoP:0};
+  L.forEach(r => { t.ll += r[4]; t.esc += r[5]; t.m1 += r[6]; t.at += r[7]; t.ab += r[8]; t.tmoP += r[12] * r[7]; });
+  t.cont = t.ll ? t.esc / t.ll : null;
+  t.alc  = t.esc ? t.m1 / t.esc : null;
+  t.aband = (t.at + t.ab) ? t.ab / (t.at + t.ab) : null;
+  t.tmo = t.at ? Math.round(t.tmoP / t.at) : null;
+  return t;
+}
+const mmss = s => s == null ? '—' : Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+const CAR_TH = `<th class="n">Llamadas${efSub('(marcadas por la carga)')}</th><th class="n">Escucha audio${efSub('(contestaron)')}</th>
+  <th class="n">Contacto${efSub('(escucha ÷ llamadas)')}</th><th class="n">Marca1${efSub('(llegaron a un asesor)')}</th>
+  <th class="n">Alcance${efSub('(Marca1 ÷ escucha)')}</th><th class="n">Atendidos</th><th class="n">Abandonos</th>
+  <th class="n">% Abandono${efSub('(abandonos ÷ atendidos + abandonos)')}</th><th class="n">TMO${efSub('(min:seg)')}</th>`;
+const carTds = t => `<td class="n">${nfC(t.ll)}</td><td class="n">${nfC(t.esc)}</td><td class="n">${pf(t.cont)}</td><td class="n"><b>${nfC(t.m1)}</b></td>
+  <td class="n">${t.alc == null ? '—' : dec(100*t.alc) + ' %'}</td><td class="n">${nfC(t.at)}</td><td class="n">${nfC(t.ab)}</td><td class="n">${pf(t.aband)}</td><td class="n">${mmss(t.tmo)}</td>`;
+function vCargas(v){
+  const dias = Object.keys(D.car || {}).sort();
+  if(!dias.length){
+    v.appendChild(el('div','card p vacio','Todavía no hay cargas guardadas. Se cargan con la extracción diaria; aparecen con la próxima actualización.')); return;
+  }
+  if(dias.indexOf(S.diaCar) < 0) S.diaCar = dias[dias.length-1];
+  const c = el('div','meses');
+  dias.slice(-14).forEach(f => {
+    const b = el('button','mesbtn'+(S.diaCar===f?' on':''), esc(fechaCorta(f)));
+    b.onclick = () => { S.diaCar = f; pintar(); };
+    c.appendChild(b);
+  });
+  v.appendChild(c);
+  const L = D.car[S.diaCar], T = carSuma(L);
+  const g = el('div','kpis');
+  g.appendChild(kpi('Llamadas marcadas', nfC(T.ll), 'Todas las cargas del día'));
+  g.appendChild(kpi('Contacto', pf(T.cont), 'Escucha audio ÷ llamadas'));
+  g.appendChild(kpi('Marca1', nfC(T.m1), `Alcance ${T.alc == null ? '—' : dec(100*T.alc) + ' %'}`));
+  g.appendChild(kpi('Atendidos', nfC(T.at), `${nfC(T.ab)} abandonos`));
+  g.appendChild(kpi('% Abandono', pf(T.aband), 'Abandonos ÷ atendidos + abandonos'));
+  v.appendChild(g);
+
+  // Por carga
+  const porC = {}; L.forEach(r => { const k = r[3] || 'Sin carga'; (porC[k] = porC[k] || {est:r[2], reg:r[1], f:[]}).f.push(r); });
+  const s1 = el('section','sec'); s1.appendChild(el('h3',null,'Por carga'));
+  const t1 = el('table','tbl aux');
+  t1.innerHTML = `<thead><tr><th>Carga</th><th>Región</th><th>Estrategia</th>${CAR_TH}</tr></thead>`;
+  const tb1 = el('tbody');
+  Object.keys(porC).map(k => ({k, p:porC[k], t:carSuma(porC[k].f)})).sort((a,b) => b.t.ll - a.t.ll)
+    .forEach(({k,p,t}) => { const tr = el('tr'); tr.innerHTML = `<td>${esc(k)}</td><td>${esc(p.reg)}</td><td>${esc(p.est)}</td>${carTds(t)}`; tb1.appendChild(tr); });
+  t1.appendChild(tb1);
+  const tf1 = el('tfoot'); tf1.innerHTML = `<tr style="background:#FAFAFE;font-weight:700;border-top:2px solid var(--linea)"><td>Total del día</td><td></td><td></td>${carTds(T)}</tr>`;
+  t1.appendChild(tf1);
+  const e1 = el('div','card envolt'); e1.appendChild(t1); s1.appendChild(e1); v.appendChild(s1);
+
+  // Hora a hora
+  const porH = {}; L.forEach(r => (porH[r[0]] = porH[r[0]] || []).push(r));
+  const s2 = el('section','sec'); s2.appendChild(el('h3',null,'Hora a hora'));
+  const t2 = el('table','tbl aux');
+  t2.innerHTML = `<thead><tr><th>Hora</th>${CAR_TH}</tr></thead>`;
+  const tb2 = el('tbody');
+  Object.keys(porH).map(Number).sort((a,b) => a - b).forEach(h => { const tr = el('tr');
+    tr.innerHTML = `<td>${String(h).padStart(2,'0')}:00</td>${carTds(carSuma(porH[h]))}`; tb2.appendChild(tr); });
+  t2.appendChild(tb2);
+  const e2 = el('div','card envolt'); e2.appendChild(t2); s2.appendChild(e2); v.appendChild(s2);
+
+  // Día a día (si ya hay varios)
+  if(dias.length > 1){
+    const s3 = el('section','sec'); s3.appendChild(el('h3',null,'Día a día'));
+    const t3 = el('table','tbl aux');
+    t3.innerHTML = `<thead><tr><th>Día</th>${CAR_TH}</tr></thead>`;
+    const tb3 = el('tbody');
+    dias.slice().reverse().forEach(f => { const tr = el('tr'); tr.innerHTML = `<td>${fechaCorta(f)}</td>${carTds(carSuma(D.car[f]))}`; tb3.appendChild(tr); });
+    t3.appendChild(tb3);
+    const e3 = el('div','card envolt'); e3.appendChild(t3); s3.appendChild(e3); v.appendChild(s3);
+  }
+  v.appendChild(el('div','nota',
+    `Fuente: Power BI de operación, «Corte Agentes» · Análisis de cargas · Hogar, guardado cada noche. Es de toda la campaña Hogar
+     (todas las ciudades), no solo de este equipo. Solo se muestran las cargas con movimiento.`));
 }
 
 /* ===================================================================== */

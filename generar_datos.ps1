@@ -970,6 +970,74 @@ try {
   $auxiliares = [ordered]@{}; $auxMeta = $null
 }
 
+# ============================================================ EXTRACCIÓN
+# La carpeta "EXTRACCION DE EFECTIVIDADES POWER BI" (tarea de las 8 pm) guarda
+# cada día, del Power BI «Corte Agentes», un CSV por campaña y por tabla en
+# snapshots\AAAA-MM-DD. De ahí salen tres cosas para Hogar:
+#   - efectividad: rellena los días que la foto propia no alcanzó a tomar,
+#   - tipificaciones por asesor (con la duración de la llamada),
+#   - cargas hora a hora (toda la campaña Hogar, no solo este equipo).
+# Si la carpeta no existe o un día viene dañado, el portal sale sin esa parte.
+Write-Host "`n== extracción (tipificaciones y cargas) ==" -ForegroundColor Cyan
+$EXTR_SNAP = Join-Path (Split-Path -Parent $Raiz) 'EXTRACCION DE EFECTIVIDADES POWER BI\snapshots'
+function Num([object]$v){
+  $x = 0.0
+  if ($null -ne $v -and "$v" -ne '') { [void][double]::TryParse("$v", [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$x) }
+  return $x
+}
+$exHogar = [ordered]@{}; $tipNombres = New-Object System.Collections.ArrayList
+$tipDias = [ordered]@{}; $carDias = [ordered]@{}
+$normACc = @{}; foreach ($a in $asesores) { $normACc[(Norm $a.nombre)] = $a.cedula.Trim() }
+if (Test-Path $EXTR_SNAP) {
+  foreach ($dir in (Get-ChildItem $EXTR_SNAP -Directory | Where-Object { $_.Name -match '^\d{4}-\d{2}-\d{2}$' } | Sort-Object Name)) {
+    $f = $dir.Name
+    try {
+      # Los nombres de Tipificaciones son los mismos de la tabla de agentes del día:
+      # se cruzan por nombre exacto y, si no, por nombre normalizado del roster.
+      $nom2cc = @{}
+      $pH = Join-Path $dir.FullName 'Hogar.csv'
+      if (Test-Path $pH) {
+        $filasH = @(Import-Csv $pH -Delimiter ';' -Encoding UTF8)
+        $exHogar[$f] = $filasH
+        foreach ($r in $filasH) { $nom2cc["$($r.'Nombre Agente')".Trim()] = "$($r.Documento)".Trim() }
+      }
+      $pT = Join-Path $dir.FullName 'Tipificaciones_Hogar.csv'
+      if (Test-Path $pT) {
+        $dia = [ordered]@{}
+        foreach ($r in (Import-Csv $pT -Delimiter ';' -Encoding UTF8)) {
+          $n = "$($r.nombre_agente)".Trim()
+          $cc = $null
+          if ($nom2cc.ContainsKey($n)) { $cc = $nom2cc[$n] } elseif ($normACc.ContainsKey((Norm $n))) { $cc = $normACc[(Norm $n)] }
+          if (-not $cc -or -not $porCC.ContainsKey($cc)) { continue }
+          $t = "$($r.'Tipificación')".Trim(); if (-not $t) { $t = 'Sin tipificar' }
+          $ti = $tipNombres.IndexOf($t); if ($ti -lt 0) { $ti = $tipNombres.Add($t) }
+          if (-not $dia.Contains($cc)) { $dia[$cc] = [ordered]@{} }
+          $k = "$ti"
+          $b = @([int](Num $r.'Menor 1 minuto'), [int](Num $r.'Entre 1 y 3 minutos'), [int](Num $r.'Entre 3 y 5 minutos'), [int](Num $r.'5 minutos o más'))
+          if ($dia[$cc].Contains($k)) { $o = $dia[$cc][$k]; for ($i=0; $i -lt 4; $i++) { $b[$i] += $o[$i] } }
+          $dia[$cc][$k] = $b
+        }
+        if ($dia.Count) { $tipDias[$f] = $dia }
+      }
+      $pC = Get-ChildItem $dir.FullName -Filter 'Cargas_Hogar_*.csv' | Select-Object -First 1
+      if ($pC) {
+        $car = New-Object System.Collections.ArrayList
+        foreach ($r in (Import-Csv $pC.FullName -Delimiter ';' -Encoding UTF8)) {
+          $ll = Num $r.Llamadas; $m1 = Num $r.Marca1; $at = Num $r.Atendidos
+          if ($ll -le 0 -and $m1 -le 0 -and $at -le 0) { continue }
+          # hora, región, estrategia, carga, llamadas, escucha audio, Marca1, atendidos,
+          # abandonos, contacto, alcance, agentes, TMO (seg)
+          [void]$car.Add(@([int](Num $r.Hora), "$($r.'Región')", "$($r.Estrategia)", "$($r.nombre_carga)".Trim(), [int]$ll,
+            [int](Num $r.'Escucha Audio'), [int]$m1, [int]$at, [int](Num $r.Abandonos),
+            [math]::Round((Num $r.Contacto),4), [math]::Round((Num $r.Alcance),5), [int](Num $r.Agentes), [int][math]::Round((Num $r.TMO),0)))
+        }
+        if ($car.Count) { $carDias[$f] = $car }
+      }
+    } catch { Avi "extracción $($f): no se pudo leer ($($_.Exception.Message))" }
+  }
+  Ok ("extracción: {0} días de tipificaciones ({1} tipos) · {2} días de cargas · {3} días de efectividad de respaldo" -f $tipDias.Count, $tipNombres.Count, $carDias.Count, $exHogar.Count)
+} else { Avi "no está la carpeta de la extracción ($EXTR_SNAP): el portal sale sin tipificaciones ni cargas" }
+
 # ============================================================ EFECTIVIDAD
 # Llamadas y efectividad por día, desde el Power BI de operación ("Corte
 # Agentes Hogar"). Ese reporte solo muestra el día en curso, así que
@@ -983,6 +1051,26 @@ $efJson = [ordered]@{}
 $efHist = Join-Path $PSScriptRoot 'efectividad_historico.json'
 if (Test-Path $efHist) {
   $ej = [IO.File]::ReadAllText($efHist, [Text.UTF8Encoding]::new($false)) | ConvertFrom-Json
+  # Respaldo: los días que la foto propia no tomó se completan con la extracción.
+  # La foto propia manda cuando existe (se toma más tarde en el día). La extracción
+  # no trae accesos por blaster: se recuperan de Efect. Blaster × Marca1.
+  $rellenados = 0
+  foreach ($f in $exHogar.Keys) {
+    foreach ($r in $exHogar[$f]) {
+      $cc = "$($r.Documento)".Trim()
+      if (-not $porCC.ContainsKey($cc)) { continue }
+      $pr = $ej.PSObject.Properties[$cc]
+      if (-not $pr) { $ej | Add-Member -NotePropertyName $cc -NotePropertyValue ([pscustomobject]@{}) -Force; $pr = $ej.PSObject.Properties[$cc] }
+      if ($pr.Value.PSObject.Properties[$f]) { continue }
+      $m1 = [int](Num $r.'Llamadas Blaster (Marca1)')
+      $pr.Value | Add-Member -NotePropertyName $f -NotePropertyValue ([pscustomobject][ordered]@{
+        m1=$m1; omni=[int](Num $r.'Llamadas OmniC'); motor=[int](Num $r.'Llamadas Motor'); man=[int](Num $r.'Llamadas Manuales')
+        manU=[int](Num $r.'Manuales Únicos'); acc=[int](Num $r.'Ventas Creadas'); accB=[int][math]::Round((Num $r.'Efectividad Blaster') * $m1)
+        act='extracción' })
+      $rellenados++
+    }
+  }
+  if ($rellenados) { Ok "efectividad: $rellenados días-asesor completados con la extracción" }
   foreach ($pc in $ej.PSObject.Properties) {
     $cc = $pc.Name
     if (-not $porCC.ContainsKey($cc)) { continue }
@@ -1085,6 +1173,10 @@ $doc = [ordered]@{
   ojt      = $ojtJson
   # Llamadas y efectividad diaria (foto diaria del Power BI de operación)
   ef       = $efJson
+  # Tipificaciones por asesor y día (con duración) y cargas hora a hora, de la
+  # extracción diaria del Power BI «Corte Agentes».
+  tip      = $(if ($tipDias.Count) { [ordered]@{ tips = @($tipNombres); dias = $tipDias } } else { $null })
+  car      = $(if ($carDias.Count) { $carDias } else { $null })
   # Tiempos del día por asesor (Power BI de tiempos). Vacío si no respondió.
   aux      = $auxiliares
   auxMeta  = $auxMeta
